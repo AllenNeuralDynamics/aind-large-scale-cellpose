@@ -1,5 +1,16 @@
 metadata_version: 1
-name: aind-capsule-template
-description: Basic structure of a capsule to be customized as needed.
+name: aind-z1-cell-segmentation
+description: Large-scale cell segmentation for Z1 data.
 authors:
-- name: AIND
+- name: Camilo Laiton
+  affiliations:
+  - name: Allen Institute for Neural Dynamics
+- name: Tim Wang
+  affiliations:
+  - name: Allen Institute for Neural Dynamics
+- name: Sharmishtaa Seshamani
+  affiliations:
+  - name: Allen Institute for Neural Dynamics
+- name: David Feng
+  affiliations:
+  - name: Allen Institute for Neural Dynamics
