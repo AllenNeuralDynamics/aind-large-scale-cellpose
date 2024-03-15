@@ -1,3 +1,9 @@
+"""
+Following flows to the center of identified cells.
+This operation needs to happen between overlapping
+3D chunks to avoid having misagreements between chunks.
+"""
+
 import multiprocessing
 import os
 from time import time
@@ -9,8 +15,7 @@ import utils
 import zarr
 from aind_large_scale_prediction._shared.types import ArrayLike, PathLike
 from aind_large_scale_prediction.generator.dataset import create_data_loader
-from aind_large_scale_prediction.generator.utils import (
-    get_chunk_numbers, get_output_coordinate_overlap, recover_global_position)
+from aind_large_scale_prediction.generator.utils import recover_global_position
 from cellpose import core
 from cellpose.dynamics import follow_flows
 from cellpose.io import logger_setup
@@ -18,40 +23,37 @@ from cellpose.models import assign_device
 from scipy.ndimage import maximum_filter1d
 
 
-def create_folder(dest_dir: PathLike, verbose: Optional[bool] = False) -> None:
+def unpad_global_coords(
+    global_coord_pos: Tuple[slice, ...],
+    block_shape: Tuple[int],
+    overlap_prediction_chunksize: Tuple[int],
+    dataset_shape: Tuple[int],
+) -> Tuple[Tuple[int], Tuple[int]]:
     """
-    Create new folders.
+    Function that unpads global coordinates based
+    on the overlapping chunk area.
 
     Parameters
-    ------------------------
+    ----------
+    global_coord_pos: Tuple[slice, ...]
+        global coordinate position of current chunk
 
-    dest_dir: PathLike
-        Path where the folder will be created if it does not exist.
+    block_shape: Tuple[int]
+        Block shape
 
-    verbose: Optional[bool]
-        If we want to show information about the folder status. Default False.
+    overlap_prediction_chunksize: Tuple[int]
+        Overlap happening in each axis
 
-    Raises
-    ------------------------
+    dataset_shape: Tuple[int]
+        Dataset shape
 
-    OSError:
-        if the folder exists.
-
+    Returns
+    -------
+    Tuple[Tuple[int], Tuple[int]]
+        Tuple with the unpadded global coordinate position
+        and the local coordinate position that will be used
+        within the overlaped chunk.
     """
-
-    if not (os.path.exists(dest_dir)):
-        try:
-            if verbose:
-                print(f"Creating new directory: {dest_dir}")
-            os.makedirs(dest_dir)
-        except OSError as e:
-            if e.errno != os.errno.EEXIST:
-                raise
-
-
-def unpad_global_coords(
-    global_coord_pos, block_shape, overlap_prediction_chunksize, dataset_shape
-):
     unpadded_glob_coord_pos = []
     unpadded_local_coord_pos = []
     for idx, ax_pos in enumerate(global_coord_pos):
@@ -131,10 +133,10 @@ def large_scale_follow_flows(
     global_seeds_folder = f"{predictions_folder}/seeds/global_overlap_overlap_unpadded"
     hist_seeds_folder = f"{predictions_folder}/hists/hist_overlap_overlap_unpadded"
 
-    create_folder(predictions_folder)
-    create_folder(local_seeds_folder)
-    create_folder(global_seeds_folder)
-    create_folder(hist_seeds_folder)
+    utils.create_folder(predictions_folder)
+    utils.create_folder(local_seeds_folder)
+    utils.create_folder(global_seeds_folder)
+    utils.create_folder(hist_seeds_folder)
 
     co_cpus = 16  # int(utils.get_code_ocean_cpu_limit())
 

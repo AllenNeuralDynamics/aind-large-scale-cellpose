@@ -163,7 +163,7 @@ def stop_child_process(process: multiprocessing.Process):
     process.join()
 
 
-def create_logger(output_log_path: str) -> logging.Logger:
+def create_logger(output_log_path: str, mode: Optional[str] = "a") -> logging.Logger:
     """
     Creates a logger that generates
     output logs to a specific path.
@@ -173,6 +173,10 @@ def create_logger(output_log_path: str) -> logging.Logger:
     output_log_path: PathLike
         Path where the log is going
         to be stored
+
+    mode: Optional[str]
+        Open mode.
+        Default: 'a'
 
     Returns
     -----------
@@ -189,7 +193,7 @@ def create_logger(output_log_path: str) -> logging.Logger:
         datefmt="%Y-%m-%d %H:%M",
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler(LOGS_FILE, "w"),
+            logging.FileHandler(LOGS_FILE, mode),
         ],
         force=True,
     )

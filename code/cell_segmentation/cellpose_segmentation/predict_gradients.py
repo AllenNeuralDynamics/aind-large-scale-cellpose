@@ -11,7 +11,6 @@ from typing import Callable, List, Optional, Tuple
 
 import numpy as np
 import psutil
-import utils
 import zarr
 from aind_large_scale_prediction.generator.dataset import create_data_loader
 from aind_large_scale_prediction.generator.utils import recover_global_position
@@ -20,6 +19,7 @@ from cellpose.io import logger_setup
 from cellpose.models import CellposeModel, assign_device, transforms
 
 from .._shared import ArrayLike, PathLike
+from ..utils import utils
 
 
 def run_2D_cellpose(
@@ -288,7 +288,9 @@ def large_scale_cellpose_gradients_per_axis(
         raise ValueError(f"Provided workers {n_workers} > current workers {co_cpus}")
 
     logger = utils.create_logger(output_log_path=results_folder)
-    logger.info(f"{20*'='} Z1 Large-Scale Cellpose Segmentation {20*'='}")
+    logger.info(
+        f"{20*'='} Z1 Large-Scale Cellpose Gradient Prediction in Axis {axis} {20*'='}"
+    )
 
     utils.print_system_information(logger)
 
@@ -575,10 +577,6 @@ def predict_gradients(
 
         elif axis == 2:
             prediction_chunksize = (image_shape[-3], image_shape[-2], slice_per_axis)
-
-        print(
-            f"{20*'='} Large-scale computation of gradients in {axes_names[axis]} - Prediction chunksize {prediction_chunksize} {20*'='}"
-        )
 
         large_scale_cellpose_gradients_per_axis(
             dataset_path=dataset_path,
