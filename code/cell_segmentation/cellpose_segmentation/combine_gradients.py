@@ -15,7 +15,7 @@ from aind_large_scale_prediction._shared.types import ArrayLike, PathLike
 from aind_large_scale_prediction.generator.dataset import create_data_loader
 from aind_large_scale_prediction.generator.utils import recover_global_position
 
-from ..utils import utils
+from .utils import utils
 
 
 def combine_gradients(
@@ -72,6 +72,10 @@ def combine_gradients(
         time from the raw data. If provided, then
         target_size_mb is ignored. Default: None
 
+    results_folder: PathLike
+        Path where the results folder for cell segmentation
+        is located.
+
     """
 
     co_cpus = int(utils.get_code_ocean_cpu_limit())
@@ -81,8 +85,6 @@ def combine_gradients(
 
     logger = utils.create_logger(output_log_path=results_folder, mode="a")
     logger.info(f"{20*'='} Z1 Large-Scale Cellpose Combination of Gradients {20*'='}")
-
-    utils.print_system_information(logger)
 
     logger.info(f"Processing dataset {dataset_path}")
 

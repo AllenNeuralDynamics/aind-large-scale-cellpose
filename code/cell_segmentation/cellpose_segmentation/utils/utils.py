@@ -11,9 +11,10 @@ from datetime import datetime
 from typing import List, Optional
 
 import matplotlib.pyplot as plt
+import numpy as np
 import psutil
 
-from .._shared import PathLike
+from .._shared.types import ArrayLike, PathLike
 
 
 def create_folder(dest_dir: PathLike, verbose: Optional[bool] = False) -> None:
@@ -163,7 +164,7 @@ def stop_child_process(process: multiprocessing.Process):
     process.join()
 
 
-def create_logger(output_log_path: str, mode: Optional[str] = "a") -> logging.Logger:
+def create_logger(output_log_path: str, mode: Optional[str] = "w") -> logging.Logger:
     """
     Creates a logger that generates
     output logs to a specific path.
@@ -342,3 +343,28 @@ def print_system_information(logger: logging.Logger):
     net_io = psutil.net_io_counters()
     logger.info(f"Total Bytes Sent: {get_size(net_io.bytes_sent)}")
     logger.info(f"Total Bytes Received: {get_size(net_io.bytes_recv)}")
+
+
+def pad_array_n_d(arr: ArrayLike, dim: int = 5) -> ArrayLike:
+    """
+    Pads a daks array to be in a 5D shape.
+
+    Parameters
+    ------------------------
+
+    arr: ArrayLike
+        Dask/numpy array that contains image data.
+    dim: int
+        Number of dimensions that the array will be padded
+
+    Returns
+    ------------------------
+    ArrayLike:
+        Padded dask/numpy array.
+    """
+    if dim > 5:
+        raise ValueError("Padding more than 5 dimensions is not supported.")
+
+    while arr.ndim < dim:
+        arr = arr[np.newaxis, ...]
+    return arr

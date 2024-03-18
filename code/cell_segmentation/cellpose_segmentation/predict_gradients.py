@@ -18,8 +18,8 @@ from cellpose.core import run_net, use_gpu
 from cellpose.io import logger_setup
 from cellpose.models import CellposeModel, assign_device, transforms
 
-from .._shared import ArrayLike, PathLike
-from ..utils import utils
+from ._shared.types import ArrayLike, PathLike
+from .utils import utils
 
 
 def run_2D_cellpose(
@@ -189,14 +189,15 @@ def run_cellpose_net(
     x = transforms.normalize_img(x, **normalize_default)
 
     y, style = run_2D_cellpose(
-        model.net,
-        x,
-        p=axis,
+        net=model.net,
+        imgs=x,
+        img_axis=axis,
         rsz=rescale,
         anisotropy=anisotropy,
         augment=False,
         tile=True,
         tile_overlap=0.1,
+        bsize=224,
     )
 
     return y
@@ -211,6 +212,7 @@ def large_scale_cellpose_gradients_per_axis(
     target_size_mb: int,
     n_workers: int,
     batch_size: int,
+    results_folder: PathLike,
     super_chunksize: Optional[Tuple[int, ...]] = None,
     lazy_callback_fn: Optional[Callable[[ArrayLike], ArrayLike]] = None,
     normalize_image: Optional[bool] = True,
@@ -261,6 +263,10 @@ def large_scale_cellpose_gradients_per_axis(
         Number of prediction chunksize blocks that will be pulled
         per worker
 
+    results_folder: PathLike
+        Path where the results folder for cell segmentation
+        is located.
+
     super_chunksize: Optional[Tuple[int, ...]]
         Super chunk size. Could be None if target_size_mb is provided.
         Default: None
@@ -280,19 +286,19 @@ def large_scale_cellpose_gradients_per_axis(
         Cell diameter for cellpose
 
     """
-    results_folder = os.path.abspath("../results")
 
     co_cpus = int(utils.get_code_ocean_cpu_limit())
 
     if n_workers > co_cpus:
         raise ValueError(f"Provided workers {n_workers} > current workers {co_cpus}")
 
-    logger = utils.create_logger(output_log_path=results_folder)
+    logger = utils.create_logger(output_log_path=results_folder, mode="w")
     logger.info(
         f"{20*'='} Z1 Large-Scale Cellpose Gradient Prediction in Axis {axis} {20*'='}"
     )
 
-    utils.print_system_information(logger)
+    if not axis:
+        utils.print_system_information(logger)
 
     logger.info(f"Processing dataset {dataset_path} with mulsticale {multiscale}")
 
@@ -441,11 +447,8 @@ def large_scale_cellpose_gradients_per_axis(
             data=data,
             model=model,
             axis=axis,
-            compute_masks=False,
-            batch_size=8,
             normalize=normalize_image,
             diameter=15,
-            rsz=1.0,
             anisotropy=1.0,
         )
 
@@ -463,7 +466,17 @@ def large_scale_cellpose_gradients_per_axis(
         global_coord_pos = tuple(global_coord_pos)
         logger.info(f"Writing to: {global_coord_pos}")
 
-        output_gradients[global_coord_pos] = np.expand_dims(y, axis=0)
+        prediction = np.expand_dims(y, axis=0)
+
+        output_shape = output_gradients[global_coord_pos].shape
+        output_prediction = prediction[
+            : output_shape[0],
+            : output_shape[1],
+            : output_shape[2],
+            : output_shape[3],
+            : output_shape[4],
+        ]
+        output_gradients[global_coord_pos] = output_prediction
 
         logger.info(
             f"Batch {i}: {sample.batch_tensor.shape} - Pinned?: {sample.batch_tensor.is_pinned()} - dtype: {sample.batch_tensor.dtype} - device: {sample.batch_tensor.device} - global_coords: {global_coord_pos} - Pred shape: {y.shape}"
@@ -482,7 +495,7 @@ def large_scale_cellpose_gradients_per_axis(
             cpu_percentages,
             memory_usages,
             results_folder,
-            "cellpose_segmentation",
+            "cellpose_predict_gradients",
         )
 
 
@@ -494,11 +507,12 @@ def predict_gradients(
     target_size_mb: int,
     n_workers: int,
     batch_size: int,
+    results_folder: PathLike,
     super_chunksize: Optional[Tuple[int, ...]] = None,
     normalize_image: Optional[bool] = True,
     model_name: Optional[str] = "cyto",
     cell_diameter: Optional[int] = 15,
-):
+) -> Tuple[int]:
     """
     Large-scale cellpose prediction of gradients.
     We estimate the gradients using entire 2D planes in
@@ -541,6 +555,10 @@ def predict_gradients(
         Number of prediction chunksize blocks that will be pulled
         per worker
 
+    results_folder: PathLike
+        Path where the results folder for cell segmentation
+        is located.
+
     super_chunksize: Optional[Tuple[int, ...]]
         Super chunk size. Could be None if target_size_mb is provided.
         Default: None
@@ -554,6 +572,10 @@ def predict_gradients(
     cell_diameter: Optional[int] = 15
         Cell diameter for cellpose
 
+    Returns
+    -------
+    Tuple[int]
+        Tuple with the shape of the original dataset
     """
 
     # Reading image shape
@@ -591,7 +613,10 @@ def predict_gradients(
             normalize_image=normalize_image,
             model_name=model_name,
             cell_diameter=cell_diameter,
+            results_folder=results_folder,
         )
+
+    return image_shape
 
 
 def main():

@@ -11,7 +11,6 @@ from typing import Callable, Optional, Tuple
 
 import numpy as np
 import psutil
-import utils
 import zarr
 from aind_large_scale_prediction._shared.types import ArrayLike, PathLike
 from aind_large_scale_prediction.generator.dataset import create_data_loader
@@ -22,6 +21,8 @@ from cellpose.dynamics import follow_flows
 from cellpose.io import logger_setup
 from cellpose.models import assign_device
 from scipy.ndimage import maximum_filter1d
+
+from .utils import utils
 
 
 def computing_overlapping_hist_and_seed_finding(
@@ -104,6 +105,7 @@ def generate_flows_and_centroids(
     n_workers: int,
     batch_size: int,
     super_chunksize: Tuple[int, ...],
+    results_folder: PathLike,
     lazy_callback_fn: Optional[Callable[[ArrayLike], ArrayLike]] = None,
 ):
     """
@@ -149,14 +151,15 @@ def generate_flows_and_centroids(
         time from the raw data. If provided, then
         target_size_mb is ignored. Default: None
 
+    results_folder: PathLike
+        Path where the results folder for cell segmentation
+        is located.
 
     Returns
     -------
     PathLike:
         Path where the global cell centroids where generated.
     """
-
-    results_folder = os.path.abspath("./results")
 
     predictions_folder = f"{results_folder}/flow_results"
     # local_seeds_folder = f"{predictions_folder}/seeds/local_overlap_overlap_unpadded"
@@ -173,10 +176,8 @@ def generate_flows_and_centroids(
     if n_workers > co_cpus:
         raise ValueError(f"Provided workers {n_workers} > current workers {co_cpus}")
 
-    logger = utils.create_logger(output_log_path=results_folder)
+    logger = utils.create_logger(output_log_path=results_folder, mode="a")
     logger.info(f"{20*'='} Z1 Large-Scale Generate Seeds {20*'='}")
-
-    # utils.print_system_information(logger)
 
     logger.info(f"Processing dataset {dataset_path}")
 

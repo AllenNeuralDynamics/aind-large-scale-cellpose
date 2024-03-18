@@ -15,7 +15,6 @@ from typing import Callable, Optional, Tuple
 import fastremap
 import numpy as np
 import psutil
-import utils
 import zarr
 from aind_large_scale_prediction.generator.dataset import create_data_loader
 from aind_large_scale_prediction.generator.utils import (
@@ -24,8 +23,8 @@ from cellpose import metrics
 from scipy.ndimage import binary_fill_holes, grey_dilation, map_coordinates
 from skimage.measure import regionprops
 
-from .._shared.types import ArrayLike, PathLike
-from ..utils import utils
+from ._shared.types import ArrayLike, PathLike
+from .utils import utils
 
 
 def create_initial_mask(
@@ -407,13 +406,15 @@ def generate_masks(
     hists_path: PathLike,
     cell_centroids_path: PathLike,
     output_seg_mask_path: PathLike,
+    original_dataset_shape: Tuple[int, ...],
     cell_diameter: int,
     prediction_chunksize: Tuple[int, ...],
     target_size_mb: int,
     n_workers: int,
     batch_size: int,
+    results_folder: PathLike,
     super_chunksize: Tuple[int, ...],
-    min_cell_volume: Optional[int] = 0,
+    min_cell_volume: Optional[int] = 80,
     flow_threshold: Optional[float] = 0.0,
     lazy_callback_fn: Optional[Callable[[ArrayLike], ArrayLike]] = None,
 ):
@@ -456,6 +457,10 @@ def generate_masks(
     batch_size: int
         Batch size
 
+    results_folder: PathLike
+        Path where the results folder for cell segmentation
+        is located.
+
     super_chunksize: Optional[Tuple[int, ...]]
         Super chunk size that will be in memory at a
         time from the raw data. If provided, then
@@ -489,17 +494,13 @@ def generate_masks(
         print("No seeds found, exiting...")
         exit(1)  # EXIT_FAILURE
 
-    results_folder = os.path.abspath("./results")
-
     co_cpus = int(utils.get_code_ocean_cpu_limit())
 
     if n_workers > co_cpus:
         raise ValueError(f"Provided workers {n_workers} > current workers {co_cpus}")
 
-    logger = utils.create_logger(output_log_path=results_folder)
+    logger = utils.create_logger(output_log_path=results_folder, mode="a")
     logger.info(f"{20*'='} Z1 Large-Scale Generate Segmentation Mask {20*'='}")
-
-    # utils.print_system_information(logger)
 
     logger.info(f"Processing dataset {dataset_path}")
 
@@ -571,8 +572,12 @@ def generate_masks(
     output_seg_masks = zarr.open(
         output_seg_mask_path,
         "w",
-        shape=tuple(zarr_dataset.lazy_data.shape[-3:]),
-        chunks=tuple(prediction_chunksize[-3:]),
+        shape=original_dataset_shape,  # tuple(zarr_dataset.lazy_data.shape[-3:]),
+        chunks=(
+            1,
+            1,
+        )
+        + tuple(prediction_chunksize[-3:]),
         dtype=np.int32,
     )
 
@@ -652,9 +657,27 @@ def generate_masks(
                 iter_points=False,
             )
 
-        output_seg_masks[unpadded_global_slice[1:]] = chunked_seg_mask[
-            unpadded_local_slice[1:]
+        # Adding new axis for the output segmentation
+        unpad_chunked_seg_mask = chunked_seg_mask[unpadded_local_slice[1:]]
+        unpad_chunked_seg_mask = utils.pad_array_n_d(
+            arr=unpad_chunked_seg_mask, dim=len(original_dataset_shape)
+        )
+
+        output_slices = (
+            slice(0, 1),
+            slice(0, 1),
+        ) + unpadded_global_slice[1:]
+        output_chunk_shape = output_seg_masks[output_slices].shape
+
+        unpad_chunked_seg_mask = unpad_chunked_seg_mask[
+            :,
+            :,
+            : output_chunk_shape[-3],
+            : output_chunk_shape[-2],
+            : output_chunk_shape[-1],
         ]
+
+        output_seg_masks[output_slices] = unpad_chunked_seg_mask
 
     end_time = time()
 
@@ -711,6 +734,7 @@ def main(
         hists_path=hists_path,
         cell_centroids_path=cell_centroids_path,
         output_seg_mask_path=output_seg_mask,
+        original_dataset_shape=(1, 1, 114, 827, 598),
         cell_diameter=cell_diameter,
         prediction_chunksize=prediction_chunksize,
         target_size_mb=target_size_mb,
@@ -724,8 +748,8 @@ def main(
 
 if __name__ == "__main__":
     main(
-        pflows_path="./results/pflows.zarr",
-        hists_path="./results/hists.zarr",
-        seeds_path="./results/predictions/seeds/global_overlap_overlap_unpadded",
-        output_seg_mask="./results/segmentation_mask.zarr",
+        pflows_path="../../results/pflows.zarr",
+        hists_path="../../results/hists.zarr",
+        seeds_path="../../results/flow_results/seeds/global",
+        output_seg_mask="../../results/segmentation_mask.zarr",
     )
