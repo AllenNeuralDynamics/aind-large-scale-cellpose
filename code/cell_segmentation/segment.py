@@ -32,7 +32,7 @@ def segment():
         target_size_mb = 3072  # None
         n_workers = 0  # 16
         batch_size = 1
-        multiscale = "3"
+        multiscale = "2"
 
         # Cellpose params
         model_name = "cyto"
@@ -98,7 +98,6 @@ def segment():
         )
 
         output_segmentation_mask = f"{results_folder}/segmentation_mask.zarr"
-        # cell_centroids_path = f"{results_folder}/flow_results/seeds/global"
 
         # Large-scale segmentation mask generation
         generate_masks(
@@ -107,7 +106,7 @@ def segment():
             hists_path=output_combined_hists,
             cell_centroids_path=cell_centroids_path,
             output_seg_mask_path=output_segmentation_mask,
-            original_dataset_shape=(1, 1, 114, 827, 598),  # dataset_shape,
+            original_dataset_shape=dataset_shape,
             cell_diameter=cell_diameter,
             prediction_chunksize=(3, 128, 128, 128),
             target_size_mb=target_size_mb,
