@@ -47,7 +47,6 @@ def segment(
         target_size_mb = 3072  # None
         n_workers = 0  # 16
         batch_size = 1
-        multiscale = "2"
 
         # Cellpose params
         model_name = "cyto"
