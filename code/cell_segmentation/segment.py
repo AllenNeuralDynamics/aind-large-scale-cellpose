@@ -4,26 +4,41 @@ Main file to run segmentation
 
 import os
 
-from cellpose_segmentation.combine_gradients import combine_gradients
-from cellpose_segmentation.compute_flows import generate_flows_and_centroids
-from cellpose_segmentation.compute_masks import generate_masks
-from cellpose_segmentation.predict_gradients import predict_gradients
+from .cellpose_segmentation._shared.types import PathLike
+from .cellpose_segmentation.combine_gradients import combine_gradients
+from .cellpose_segmentation.compute_flows import generate_flows_and_centroids
+from .cellpose_segmentation.compute_masks import generate_masks
+from .cellpose_segmentation.predict_gradients import predict_gradients
 
 
-def segment():
+def segment(
+    dataset_path: PathLike,
+    multiscale: str,
+    results_folder: PathLike,
+    data_folder: PathLike,
+    scratch_folder: PathLike,
+):
     """
     Segments a Z1 dataset.
+
+    Parameters
+    ----------
+    dataset_path: PathLike
+        Path where the data is located.
+
+    multiscale: str
+        Dataset multiscale.
+
+    results_folder: PathLike
+        Path of the results folder in Code Ocean.
+
+    data_folder: PathLike
+        Path of the data folder in Code Ocean.
+
+    scratch_folder: PathLike
+        Path of the scratch folder in Code Ocean.
+
     """
-
-    # Code ocean folders
-    results_folder = os.path.abspath("../../results")
-    data_folder = os.path.abspath("../../data")
-
-    # Dataset to process
-    IMAGE_PATH = "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-02-09_13-28-49"
-    TILE_NAME = "channel_405.zarr"
-    # dataset_path = f"s3://{BUCKET_NAME}/{IMAGE_PATH}/{TILE_NAME}"
-    dataset_path = f"{data_folder}/{IMAGE_PATH}/{TILE_NAME}"
 
     if os.path.exists(dataset_path) and os.path.exists(results_folder):
 
