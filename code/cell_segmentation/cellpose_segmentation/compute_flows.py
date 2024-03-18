@@ -15,7 +15,8 @@ import utils
 import zarr
 from aind_large_scale_prediction._shared.types import ArrayLike, PathLike
 from aind_large_scale_prediction.generator.dataset import create_data_loader
-from aind_large_scale_prediction.generator.utils import recover_global_position
+from aind_large_scale_prediction.generator.utils import (
+    recover_global_position, unpad_global_coords)
 from cellpose import core
 from cellpose.dynamics import follow_flows
 from cellpose.io import logger_setup
@@ -23,65 +24,45 @@ from cellpose.models import assign_device
 from scipy.ndimage import maximum_filter1d
 
 
-def unpad_global_coords(
-    global_coord_pos: Tuple[slice, ...],
-    block_shape: Tuple[int],
-    overlap_prediction_chunksize: Tuple[int],
-    dataset_shape: Tuple[int],
-) -> Tuple[Tuple[int], Tuple[int]]:
+def computing_overlapping_hist_and_seed_finding(
+    p: ArrayLike,
+    global_coords: Tuple[slice],
+    unpadded_local_slice: Tuple[slice],
+    rpad: int = 0,
+) -> Tuple[ArrayLike, ArrayLike, ArrayLike]:
     """
-    Function that unpads global coordinates based
-    on the overlapping chunk area.
+    Computes the histogram in the overlapping chunks
+    and finds the centers of the cells (seeds).
 
     Parameters
     ----------
-    global_coord_pos: Tuple[slice, ...]
-        global coordinate position of current chunk
+    p: ArrayLike
+        Current block that contains the computed flows
+        for each orientation.
 
-    block_shape: Tuple[int]
-        Block shape
+    global_coords: Tuple[slice]
+        Slices that represent where this chunk of data
+        is located in the global coordinate system of
+        the image (this is different than the super chunk).
 
-    overlap_prediction_chunksize: Tuple[int]
-        Overlap happening in each axis
+    unpadded_local_slice: Tuple[slice]
+        Unpadded local coordinate system that is related
+        to the current super chunk in the shared memory
+        compartment.
 
-    dataset_shape: Tuple[int]
-        Dataset shape
+    rpad: int
+        If we want to add padding to the histograms. This
+        padding is applied in every axis.
+        Default: 0ß
 
     Returns
     -------
-    Tuple[Tuple[int], Tuple[int]]
-        Tuple with the unpadded global coordinate position
-        and the local coordinate position that will be used
-        within the overlaped chunk.
+    Tuple[ArrayLike, ArrayLike, ArrayLike]
+        Centroids of cells in the global coordinate system,
+        centroids of cells in the local coordinate system (chunk),
+        and the histogram for the chunk of data. This histogram
+        is unpadded based on the provided local coordinate system.ß
     """
-    unpadded_glob_coord_pos = []
-    unpadded_local_coord_pos = []
-    for idx, ax_pos in enumerate(global_coord_pos):
-        global_curr_left = ax_pos.start + overlap_prediction_chunksize[idx]
-        global_curr_right = ax_pos.stop - overlap_prediction_chunksize[idx]
-
-        local_curr_left = overlap_prediction_chunksize[idx]
-        local_curr_right = block_shape[idx] - overlap_prediction_chunksize[idx]
-
-        if ax_pos.start == 0:
-            # No padding to the left
-            global_curr_left = 0
-            local_curr_left = 0
-
-        if ax_pos.stop == dataset_shape[idx]:
-            global_curr_right = ax_pos.stop
-            local_curr_right = block_shape[idx]
-
-        unpadded_glob_coord_pos.append(slice(global_curr_left, global_curr_right))
-
-        unpadded_local_coord_pos.append(slice(local_curr_left, local_curr_right))
-
-    return tuple(unpadded_glob_coord_pos), tuple(unpadded_local_coord_pos)
-
-
-def computing_overlapping_hist_and_seed_finding(
-    p, global_coords, unpadded_local_slice, rpad: int = 20
-):
 
     pflows = []
     edges = []
@@ -112,11 +93,11 @@ def computing_overlapping_hist_and_seed_finding(
     return pix_global, pix, h
 
 
-def large_scale_follow_flows(
-    dataset_path: str,
+def generate_flows_and_centroids(
+    dataset_path: PathLike,
     multiscale: str,
-    output_pflow_path: str,
-    output_hist_path: str,
+    output_pflow_path: PathLike,
+    output_hist_path: PathLike,
     cell_diameter: int,
     prediction_chunksize: Tuple[int, ...],
     target_size_mb: int,
@@ -125,20 +106,69 @@ def large_scale_follow_flows(
     super_chunksize: Tuple[int, ...],
     lazy_callback_fn: Optional[Callable[[ArrayLike], ArrayLike]] = None,
 ):
+    """
+    Computes the flows in every axis. It also generated the
+    centroids of each cell as numpy arrays. The provided
+    computed gradients must be the ones that are within
+    cell probabilities.
+
+    Parameters
+    ----------
+    dataset_path: str
+        Path where the zarr dataset is stored. It could
+        be a local path or in a S3 path.
+
+    multiscale: str
+        Multiscale to process
+
+    output_pflow_path: PathLike
+        Path where we want to output the flows.
+
+    output_hist_path: PathLike
+        Path where we want to output the histograms.
+
+    cell_diameter: int
+        Cell diameter for cellpose.
+
+    prediction_chunksize: Tuple[int, ...]
+        Prediction chunksize.
+
+    target_size_mb: int
+        Target size in megabytes the data loader will
+        load in memory at a time
+
+    n_workers: int
+        Number of workers that will concurrently pull
+        data from the shared super chunk in memory
+
+    batch_size: int
+        Batch size
+
+    super_chunksize: Optional[Tuple[int, ...]]
+        Super chunk size that will be in memory at a
+        time from the raw data. If provided, then
+        target_size_mb is ignored. Default: None
+
+
+    Returns
+    -------
+    PathLike:
+        Path where the global cell centroids where generated.
+    """
 
     results_folder = os.path.abspath("./results")
 
-    predictions_folder = f"{results_folder}/predictions"
-    local_seeds_folder = f"{predictions_folder}/seeds/local_overlap_overlap_unpadded"
-    global_seeds_folder = f"{predictions_folder}/seeds/global_overlap_overlap_unpadded"
-    hist_seeds_folder = f"{predictions_folder}/hists/hist_overlap_overlap_unpadded"
+    predictions_folder = f"{results_folder}/flow_results"
+    # local_seeds_folder = f"{predictions_folder}/seeds/local_overlap_overlap_unpadded"
+    global_seeds_folder = f"{predictions_folder}/seeds/global"
+    # hist_seeds_folder = f"{predictions_folder}/hists/hist_overlap_overlap_unpadded"
 
-    utils.create_folder(predictions_folder)
-    utils.create_folder(local_seeds_folder)
+    # utils.create_folder(predictions_folder)
+    # utils.create_folder(local_seeds_folder)
     utils.create_folder(global_seeds_folder)
-    utils.create_folder(hist_seeds_folder)
+    # utils.create_folder(hist_seeds_folder)
 
-    co_cpus = 16  # int(utils.get_code_ocean_cpu_limit())
+    co_cpus = int(utils.get_code_ocean_cpu_limit())
 
     if n_workers > co_cpus:
         raise ValueError(f"Provided workers {n_workers} > current workers {co_cpus}")
@@ -307,18 +337,18 @@ def large_scale_follow_flows(
                 f"Points found in overlapping chunks: {local_seeds_overlp.shape}"
             )
             # Saving seeds
-            np.save(
-                f"{local_seeds_folder}/local_seeds_{unpadded_global_slice[1:]}.npy",
-                local_seeds_overlp,
-            )
+            # np.save(
+            #     f"{local_seeds_folder}/local_seeds_{unpadded_global_slice[1:]}.npy",
+            #     local_seeds_overlp,
+            # )
             np.save(
                 f"{global_seeds_folder}/global_seeds_{unpadded_global_slice[1:]}.npy",
                 global_seeds_overlp,
             )
-            np.save(
-                f"{hist_seeds_folder}/local_hist_{unpadded_global_slice[1:]}.npy",
-                hist_no_overlp,
-            )
+            # np.save(
+            #     f"{hist_seeds_folder}/local_hist_{unpadded_global_slice[1:]}.npy",
+            #     hist_no_overlp,
+            # )
             global_seeds_overlp = None
             local_seeds_overlp = None
 
@@ -338,8 +368,28 @@ def large_scale_follow_flows(
             "cellpose_generate_pflows",
         )
 
+    return global_seeds_folder
 
-def generate_pflows(combined_gradients_zarr_path, output_pflow, output_hist_path):
+
+def main(
+    combined_gradients_zarr_path: PathLike,
+    output_pflow: PathLike,
+    output_hist_path: PathLike,
+):
+    """
+    Computes the flows of the combined gradients.
+
+    Parameters
+    ----------
+    combined_gradients_zarr_path: PathLike
+        Path where the combined gradients are located.
+
+    output_pflow: PathLike
+        Path where we want to ouput the followed flows.
+
+    output_hist_path: PathLike
+        Path where we want to output the histograms.
+    """
     prediction_chunksize = (3, 128, 128, 128)
     super_chunksize = None  # (3, 512, 512, 512)
     target_size_mb = 2048  # None
@@ -347,7 +397,7 @@ def generate_pflows(combined_gradients_zarr_path, output_pflow, output_hist_path
     batch_size = 1
     cell_diameter = 15
 
-    large_scale_follow_flows(
+    global_seeds_folder = generate_flows_and_centroids(
         dataset_path=combined_gradients_zarr_path,
         output_pflow_path=output_pflow,
         output_hist_path=output_hist_path,
@@ -362,7 +412,7 @@ def generate_pflows(combined_gradients_zarr_path, output_pflow, output_hist_path
 
 
 if __name__ == "__main__":
-    generate_pflows(
+    main(
         combined_gradients_zarr_path="/Users/camilo.laiton/repositories/dispim-cell-seg-exp/data/good_combined_gradients.zarr",
         output_pflow="./results/pflows.zarr",
         output_hist_path="./results/hists.zarr",

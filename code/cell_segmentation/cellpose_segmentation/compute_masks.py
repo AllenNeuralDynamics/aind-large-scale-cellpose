@@ -1,3 +1,11 @@
+"""
+Computes the masks for a large-scale dataset.
+We use the computed flows and histograms to be
+able to generate the masks. It is necessary that
+the flows were computed using overlapping chunks
+in each direction.
+"""
+
 import multiprocessing
 import os
 from glob import glob
@@ -9,50 +17,69 @@ import numpy as np
 import psutil
 import utils
 import zarr
-from aind_large_scale_prediction._shared.types import ArrayLike, PathLike
 from aind_large_scale_prediction.generator.dataset import create_data_loader
-from aind_large_scale_prediction.generator.utils import recover_global_position
+from aind_large_scale_prediction.generator.utils import (
+    recover_global_position, unpad_global_coords)
 from cellpose import metrics
 from scipy.ndimage import binary_fill_holes, grey_dilation, map_coordinates
 from skimage.measure import regionprops
 
+from .._shared.types import ArrayLike, PathLike
+from ..utils import utils
 
-def create_folder(dest_dir: PathLike, verbose: Optional[bool] = False) -> None:
+
+def create_initial_mask(
+    pflows: ArrayLike,
+    cell_centroids: ArrayLike,
+    hist: ArrayLike,
+    cell_ids: ArrayLike,
+    rpad: Optional[int] = 0,
+    iter_points: Optional[bool] = False,
+) -> ArrayLike:
     """
-    Create new folders.
+    Creates the initial mask for the provided
+    flows, cell centroids and histogram for that
+    chunk of data.
 
     Parameters
-    ------------------------
+    ----------
+    pflows: ArrayLike
+        Flows for the chunk of data. These should be
+        overlapping chunks to pick cells with centroids
+        out of the current boundaries.
 
-    dest_dir: PathLike
-        Path where the folder will be created if it does not exist.
+    cell_centroids: ArrayLike
+        Cell centroids.
 
-    verbose: Optional[bool]
-        If we want to show information about the folder status. Default False.
+    hist: ArrayLike
+        Histogram for the current chunk of data.
 
-    Raises
-    ------------------------
+    cell_ids: ArrayLike
+        Cell ids for each of the cell centroids. These
+        are precomputed ids based on the total count of
+        centroids.
 
-    OSError:
-        if the folder exists.
+    rpad: Optional[int]
+        Padding that was applied in the computation
+        of histograms and centroids.
+        Default: 0
 
+    iter_points: Optional[bool]
+        If we want to iter each point to expand it in
+        a radius of 3 cubic voxels. This helps in the
+        detection of weak flows. This increases the
+        execution time, but in theory, should resolve
+        issues in weak flows.
+
+    Returns
+    -------
+    ArrayLike
+        Current mask for the block of data.
     """
-
-    if not (os.path.exists(dest_dir)):
-        try:
-            if verbose:
-                print(f"Creating new directory: {dest_dir}")
-            os.makedirs(dest_dir)
-        except OSError as e:
-            if e.errno != os.errno.EEXIST:
-                raise
-
-
-def create_initial_mask(pflows, local_points, h, cell_ids, rpad=0, iter_points=False):
     expand = np.nonzero(np.ones((3, 3, 3)))
-    shape = h.shape
+    shape = hist.shape
     dims = pflows.shape[0]
-    local_points = list(local_points)
+    cell_centroids = list(cell_centroids)
 
     # To get local neighborhood from the expand section
     # to get better accuracy in the mask generation
@@ -60,10 +87,10 @@ def create_initial_mask(pflows, local_points, h, cell_ids, rpad=0, iter_points=F
         # 5 iterations
         for iter in range(5):
             # Iterate over each point
-            for k in range(len(local_points)):
+            for k in range(len(cell_centroids)):
                 # If it's the first iteration I just convert it to list
                 if iter == 0:
-                    local_points[k] = list(local_points[k])
+                    cell_centroids[k] = list(cell_centroids[k])
 
                 # Declare a new voxel
                 newpix = []
@@ -72,7 +99,9 @@ def create_initial_mask(pflows, local_points, h, cell_ids, rpad=0, iter_points=F
 
                 # Expand each voxel 3 voxels around it
                 for i, e in enumerate(expand):
-                    epix = e[:, np.newaxis] + np.expand_dims(local_points[k][i], 0) - 1
+                    epix = (
+                        e[:, np.newaxis] + np.expand_dims(cell_centroids[k][i], 0) - 1
+                    )
                     # Flattenning points around a point inside ZYX
                     epix = epix.flatten()
 
@@ -95,18 +124,18 @@ def create_initial_mask(pflows, local_points, h, cell_ids, rpad=0, iter_points=F
                 # Check for the positions within the histogram
                 # to see if it's greater than 2
                 # non-sink pixels = True
-                igood = h[newpix] > 2
+                igood = hist[newpix] > 2
                 for i in range(dims):
-                    local_points[k][i] = newpix[i][igood]
+                    cell_centroids[k][i] = newpix[i][igood]
                 if iter == 4:
-                    local_points[k] = tuple(local_points[k])
+                    cell_centroids[k] = tuple(cell_centroids[k])
 
     # Creating seg mask with histogram shape
-    mask = np.zeros(np.array(h.shape), np.int32)
+    mask = np.zeros(np.array(hist.shape), np.int32)
 
     # Planting seeds with estimates global cell ids
-    for idx in range(len(local_points)):
-        curr_seed = tuple(local_points[idx])
+    for idx in range(len(cell_centroids)):
+        curr_seed = tuple(cell_centroids[idx])
         mask[curr_seed] = cell_ids[idx]
 
     if rpad > 0:
@@ -114,22 +143,46 @@ def create_initial_mask(pflows, local_points, h, cell_ids, rpad=0, iter_points=F
         for i in range(dims):
             pflows[i] = pflows[i] + rpad
 
-    h = h <= 2
+    hist = hist <= 2
     for iter in range(5):
         mask = grey_dilation(mask, 3)
-        mask[h] = 0
+        mask[hist] = 0
 
     mask = map_coordinates(mask, pflows, mode="nearest")
 
     return mask
 
 
-def remove_bad_flow_masks(masks, flows, threshold=0.4, device=None):
+def remove_bad_flow_masks(
+    masks: ArrayLike, flows: ArrayLike, threshold: Optional[float] = 0.4, device=None
+) -> ArrayLike:
     """
+    Removes bad flows within the generated initial mask.
     The flows provided here are dP * mask to be optimal.
     This dP is not divided by 5.0 as it is needed to follow
     the flows. flows = dP * cp_mask
+
+    Parameters
+    ----------
+    masks: ArrayLike
+        Initial computed masks.
+
+    flows: ArrayLike
+        Current flows for the computed masks.
+
+    threshold: Optional[float]
+        Current threshold for the flows.
+
+    device: Cuda.Device
+        Device where the flow error will be computed.
+        Default: None
+
+    Returns
+    -------
+    ArrayLike:
+        Mask with pruned segmentations based on error flows.
     """
+
     device0 = device
     merrors, _ = metrics.flow_error(masks, flows, device0)
     badi = 1 + (merrors > threshold).nonzero()[0]
@@ -137,7 +190,33 @@ def remove_bad_flow_masks(masks, flows, threshold=0.4, device=None):
     return masks
 
 
-def global_fill_holes_and_remove_small_masks(masks, min_size=15, start_id=0):
+def fill_holes_and_remove_small_masks(
+    masks: ArrayLike, min_size: Optional[int] = 15, start_id: Optional[int] = 0
+) -> ArrayLike:
+    """
+    Fill holes and removes small segmentation ids
+    for possible cells where it's necessary.
+
+    Parameters
+    ----------
+    masks: ArrayLike
+        Segmentation mask for the block of data.
+
+    min_size: Optional[int]
+        Minimun size of the mask to be considered
+        a cell. Default: 15
+
+    start_id: Optional[int]
+        Starting segmentation id, please ignore if
+        the cell ids were already precomputed.
+        Default: 0
+
+    Returns
+    -------
+    ArrayLike:
+        Array with the pruned segmentation masks.
+    """
+
     if masks.ndim > 3 or masks.ndim < 2:
         raise ValueError(
             "masks_to_outlines takes 2D or 3D array, not %dD array" % masks.ndim
@@ -164,30 +243,45 @@ def global_fill_holes_and_remove_small_masks(masks, min_size=15, start_id=0):
     return masks
 
 
-def compute_global_mask(
-    pflows,
-    local_points,
-    hist,
-    cell_ids,
-    dP_masked=None,
-    min_cell_volume=15,
-    flow_threshold=2.5,
-    rpad=0,
+def compute_chunked_mask(
+    pflows: ArrayLike,
+    cell_centroids: ArrayLike,
+    hist: ArrayLike,
+    cell_ids: ArrayLike,
+    dP_masked: Optional[ArrayLike] = None,
+    min_cell_volume: Optional[float] = 15,
+    flow_threshold: Optional[float] = 2.5,
+    rpad: Optional[int] = 0,
     curr_device=None,
-    iter_points=False,
-):
+    iter_points: Optional[bool] = False,
+) -> ArrayLike:
+    """
+    Computes the mask for the current chunk in memory.
+
+    These are the image processing steps applied:
+    1. We create an initial mask using the precomputed
+    cell ids for the global seeds we obtained from previous steps.
+    2. We remove relative big masks without renumbering the global ids.
+    3. If flow threshold and dp_masked are provided, we remove bad flows
+    by using cellpose.metrics.flow_error function which provides a
+    benchmark of the quality of the masks.
+    4. We fill holes and remove small masks in the segmentation.
+
+    Returns
+    -------
+    ArrayLike:
+        Segmentation mask with global ids for the chunk of data being processed.
+    """
     # Creates the initial mask, this one has the
     # previously generated global ids
     initial_mask = create_initial_mask(
         pflows=pflows,
-        local_points=local_points,
-        h=hist,
+        cell_centroids=cell_centroids,
+        hist=hist,
         cell_ids=cell_ids,
         rpad=rpad,
         iter_points=iter_points,
     )
-
-    # print("Initial mask shape: ", initial_mask.shape)
 
     chunked_shape = pflows.shape[1:]
     # Removing relative big masks without renumbering to allow global ids
@@ -216,132 +310,170 @@ def compute_global_mask(
 
     #     second_mask = np.reshape(second_mask, chunked_shape)
 
-    # print("Second mask shape: ", second_mask.shape)
-
     third_mask = second_mask.copy()
     if flow_threshold > 0 and dP_masked is not None:
         # Removing bad flows
         third_mask = remove_bad_flow_masks(
             masks=second_mask,
             flows=dP_masked,  # NOTE: dP_masked is dP*cp_mask stored is the zarr
-            threshold=2.5,
+            threshold=flow_threshold,
             device=curr_device,
         )
 
-    # print("third mask shape: ", third_mask.shape)
-
     # Fixes the holes in the segmentation mask and removing small
     # masks while keeping the same global IDs
-    fourth_mask = global_fill_holes_and_remove_small_masks(
+    fourth_mask = fill_holes_and_remove_small_masks(
         masks=third_mask.copy(),
         min_size=min_cell_volume,
     )
 
-    # print("fourth mask shape: ", third_mask.shape)
-
     return fourth_mask
 
 
-def unpad_global_coords(
-    global_coord_pos, block_shape, overlap_prediction_chunksize, dataset_shape
-):
-    unpadded_glob_coord_pos = []
-    unpadded_local_coord_pos = []
-    for idx, ax_pos in enumerate(global_coord_pos):
-        global_curr_left = ax_pos.start + overlap_prediction_chunksize[idx]
-        global_curr_right = ax_pos.stop - overlap_prediction_chunksize[idx]
+def extract_global_to_local(
+    global_ids_with_cells: ArrayLike,
+    global_slices: Tuple[slice],
+    pad: Optional[int] = 0,
+) -> ArrayLike:
+    """
+    Takes global ZYX positions and converts them
+    into local ZYX position within the chunk shape.
+    It is important to provide the chunk of data with
+    overlapping area in each direction to pick cell
+    centroids out of the current boundary.
 
-        local_curr_left = overlap_prediction_chunksize[idx]
-        local_curr_right = block_shape[idx] - overlap_prediction_chunksize[idx]
+    Parameters
+    ----------
+    global_ids_with_cells: ArrayLike
+        Global ZYX cell centroids with cell ids
+        in the last dimension.
 
-        if ax_pos.start == 0:
-            # No padding to the left
-            global_curr_left = 0
-            local_curr_left = 0
+    global_slices: Tuple[slice]
+        Global coordinate position of this chunk of
+        data in the global image.
 
-        if ax_pos.stop == dataset_shape[idx]:
-            global_curr_right = ax_pos.stop
-            local_curr_right = block_shape[idx]
+    pad: Optional[int]
+        Padding applied when computing the flows,
+        centroids and histograms. Default: 0
 
-        unpadded_glob_coord_pos.append(slice(global_curr_left, global_curr_right))
+    Returns
+    -------
+    ArrayLike:
+        ZYX positions of centroids within the current
+        chunk of data.
+    """
 
-        unpadded_local_coord_pos.append(slice(local_curr_left, local_curr_right))
-
-    return tuple(unpadded_glob_coord_pos), tuple(unpadded_local_coord_pos)
-
-
-def extract_global_to_local(sort_global_ids_with_cells, slice, pad):
     start_pos = []
     stop_pos = []
 
-    for c in slice:
+    for c in global_slices:
         start_pos.append(c.start - pad)
         stop_pos.append(c.stop + pad)
 
     start_pos = np.array(start_pos)
     stop_pos = np.array(stop_pos)
 
-    picked_sort_global_ids_with_cells = sort_global_ids_with_cells[
-        (sort_global_ids_with_cells[:, 0] >= start_pos[0])
-        & (sort_global_ids_with_cells[:, 0] < stop_pos[0])
-        & (sort_global_ids_with_cells[:, 1] >= start_pos[1])
-        & (sort_global_ids_with_cells[:, 1] < stop_pos[1])
-        & (sort_global_ids_with_cells[:, 2] >= start_pos[2])
-        & (sort_global_ids_with_cells[:, 2] < stop_pos[2])
+    # Picking locations within current chunk area in global space
+    picked_global_ids_with_cells = global_ids_with_cells[
+        (global_ids_with_cells[:, 0] >= start_pos[0])
+        & (global_ids_with_cells[:, 0] < stop_pos[0])
+        & (global_ids_with_cells[:, 1] >= start_pos[1])
+        & (global_ids_with_cells[:, 1] < stop_pos[1])
+        & (global_ids_with_cells[:, 2] >= start_pos[2])
+        & (global_ids_with_cells[:, 2] < stop_pos[2])
     ]
 
-    # print("Picked points: ", picked_sort_global_ids_with_cells, " Start pos: ", start_pos, " pad: ", pad)
-    # print("ZYX points: ", picked_sort_global_ids_with_cells[..., :3])
-    # print("Localized points: ", picked_sort_global_ids_with_cells[..., :3] - start_pos - pad)
-    # print("Real local seeds: ", real_local_seeds)
-
-    # if picked_sort_global_ids_with_cells.shape[0]:
-    #     exit()
-
-    picked_sort_global_ids_with_cells[..., :3] = (
-        picked_sort_global_ids_with_cells[..., :3] - start_pos - pad
+    # Mapping to the local coordinate system of the chunk
+    picked_global_ids_with_cells[..., :3] = (
+        picked_global_ids_with_cells[..., :3] - start_pos - pad
     )
 
     # Validating seeds are within block boundaries
-    picked_sort_global_ids_with_cells = picked_sort_global_ids_with_cells[
-        (picked_sort_global_ids_with_cells[:, 0] >= 0)
-        & (
-            picked_sort_global_ids_with_cells[:, 0]
-            <= (stop_pos[0] - start_pos[0]) + pad
-        )
-        & (picked_sort_global_ids_with_cells[:, 1] >= 0)
-        & (
-            picked_sort_global_ids_with_cells[:, 1]
-            <= (stop_pos[1] - start_pos[1]) + pad
-        )
-        & (picked_sort_global_ids_with_cells[:, 2] >= 0)
-        & (
-            picked_sort_global_ids_with_cells[:, 2]
-            <= (stop_pos[2] - start_pos[2]) + pad
-        )
+    picked_global_ids_with_cells = picked_global_ids_with_cells[
+        (picked_global_ids_with_cells[:, 0] >= 0)
+        & (picked_global_ids_with_cells[:, 0] <= (stop_pos[0] - start_pos[0]) + pad)
+        & (picked_global_ids_with_cells[:, 1] >= 0)
+        & (picked_global_ids_with_cells[:, 1] <= (stop_pos[1] - start_pos[1]) + pad)
+        & (picked_global_ids_with_cells[:, 2] >= 0)
+        & (picked_global_ids_with_cells[:, 2] <= (stop_pos[2] - start_pos[2]) + pad)
     ]
 
-    return picked_sort_global_ids_with_cells
+    return picked_global_ids_with_cells
 
 
-def large_scale_generate_masks(
-    dataset_path: str,
+def generate_masks(
+    dataset_path: PathLike,
     multiscale: str,
-    hists_path: str,
-    seeds_path: str,
-    output_seg_mask_path: str,
+    hists_path: PathLike,
+    cell_centroids_path: PathLike,
+    output_seg_mask_path: PathLike,
     cell_diameter: int,
     prediction_chunksize: Tuple[int, ...],
     target_size_mb: int,
     n_workers: int,
     batch_size: int,
     super_chunksize: Tuple[int, ...],
+    min_cell_volume: Optional[int] = 0,
+    flow_threshold: Optional[float] = 0.0,
     lazy_callback_fn: Optional[Callable[[ArrayLike], ArrayLike]] = None,
 ):
+    """
+    Computes the global segmentation masks.
+
+    Parameters
+    ----------
+    dataset_path: str
+        Path where the zarr dataset is stored. It could
+        be a local path or in a S3 path.
+
+    multiscale: str
+        Multiscale to process
+
+    hists_path: PathLike
+        Path where the histograms are stored.
+
+    cell_centroids_path: PathLike
+        Path where the global cell centroids are stored.
+
+    output_seg_mask_path: PathLike
+        Path where we want to output the global
+        segmentation mask.
+
+    cell_diameter: int
+        Cell diameter for cellpose.
+
+    prediction_chunksize: Tuple[int, ...]
+        Prediction chunksize.
+
+    target_size_mb: int
+        Target size in megabytes the data loader will
+        load in memory at a time
+
+    n_workers: int
+        Number of workers that will concurrently pull
+        data from the shared super chunk in memory
+
+    batch_size: int
+        Batch size
+
+    super_chunksize: Optional[Tuple[int, ...]]
+        Super chunk size that will be in memory at a
+        time from the raw data. If provided, then
+        target_size_mb is ignored. Default: None
+
+    min_cell_volume: Optional[int]
+        Minimum cell volume for prunning masks
+        Default: 0 (no prunning)
+
+    flow_threshold: Optional[float]
+        Flow threshold for prunning bad flows. Currently,
+        it is being ignored, it needs the dp_masked data.
+
+    """
 
     global_seeds = None
-    if os.path.exists(seeds_path):
-        global_regex = f"{seeds_path}/global_seeds_*.npy"
+    if os.path.exists(cell_centroids_path):
+        global_regex = f"{cell_centroids_path}/global_seeds_*.npy"
         global_seeds = [np.load(gs) for gs in glob(global_regex)]
         global_seeds = np.concatenate(global_seeds, axis=0)
         indices = np.argsort(global_seeds[:, 0])
@@ -355,11 +487,11 @@ def large_scale_generate_masks(
 
     if not global_seeds.shape[0]:
         print("No seeds found, exiting...")
-        exit(1)
+        exit(1)  # EXIT_FAILURE
 
     results_folder = os.path.abspath("./results")
 
-    co_cpus = 16  # int(utils.get_code_ocean_cpu_limit())
+    co_cpus = int(utils.get_code_ocean_cpu_limit())
 
     if n_workers > co_cpus:
         raise ValueError(f"Provided workers {n_workers} > current workers {co_cpus}")
@@ -485,7 +617,7 @@ def large_scale_generate_masks(
         )
 
         global_points_path = (
-            f"{seeds_path}/global_seeds_{unpadded_global_slice[1:]}.npy"
+            f"{cell_centroids_path}/global_seeds_{unpadded_global_slice[1:]}.npy"
         )
 
         logger.info(
@@ -500,22 +632,21 @@ def large_scale_generate_masks(
             picked_gl_to_lc = extract_global_to_local(
                 global_seeds.copy(),
                 global_coord_pos[1:],
-                # unpadded_global_slice[1:],
                 0,
             )
-            h = hists[global_coord_pos[1:]]
+            chunked_hist = hists[global_coord_pos[1:]]
             logger.info(
-                f"Computing seg masks in overlapping chunks: {picked_gl_to_lc.shape[0]} - data block shape: {data_block.shape} - hist shape: {h.shape}"
+                f"Computing seg masks in overlapping chunks: {picked_gl_to_lc.shape[0]} - data block shape: {data_block.shape} - hist shape: {chunked_hist.shape}"
             )
 
-            chunked_seg_mask = compute_global_mask(
+            chunked_seg_mask = compute_chunked_mask(
                 pflows=data_block.astype(np.int32),
                 dP_masked=None,
-                local_points=picked_gl_to_lc[..., :3],
-                hist=h,
+                cell_centroids=picked_gl_to_lc[..., :3],
+                hist=chunked_hist,
                 cell_ids=picked_gl_to_lc[..., -1:],
-                min_cell_volume=15,
-                flow_threshold=0.0,
+                min_cell_volume=min_cell_volume,
+                flow_threshold=flow_threshold,
                 rpad=0,
                 curr_device=None,
                 iter_points=False,
@@ -542,7 +673,31 @@ def large_scale_generate_masks(
         )
 
 
-def generate_masks(pflows_path, hists_path, seeds_path, output_seg_mask):
+def main(
+    pflows_path: PathLike,
+    hists_path: PathLike,
+    cell_centroids_path: PathLike,
+    output_seg_mask: PathLike,
+):
+    """
+    Function to generate the masks.
+
+    Parameters
+    ----------
+    pflows_path: PathLike
+        Path where the flows are stored.
+
+    hists_path: PathLike
+        Path where the histograms were stored.
+
+    cell_centroids_path: PathLike
+        Path where the global cell centroids are
+        stored. These are numpy arrays.
+
+    output_seg_mask: PathLike
+        Path where we want to store the segmentation
+        masks for the current dataset.
+    """
     prediction_chunksize = (3, 128, 128, 128)
     super_chunksize = (3, 512, 512, 512)
     target_size_mb = 2048  # None
@@ -550,11 +705,11 @@ def generate_masks(pflows_path, hists_path, seeds_path, output_seg_mask):
     n_workers = 0
     batch_size = 1
 
-    large_scale_generate_masks(
+    generate_masks(
         dataset_path=pflows_path,
         multiscale=".",
         hists_path=hists_path,
-        seeds_path=seeds_path,
+        cell_centroids_path=cell_centroids_path,
         output_seg_mask_path=output_seg_mask,
         cell_diameter=cell_diameter,
         prediction_chunksize=prediction_chunksize,
@@ -562,11 +717,13 @@ def generate_masks(pflows_path, hists_path, seeds_path, output_seg_mask):
         n_workers=n_workers,
         batch_size=batch_size,
         super_chunksize=super_chunksize,
+        min_cell_volume=0,
+        flow_threshold=0.0,
     )
 
 
 if __name__ == "__main__":
-    generate_masks(
+    main(
         pflows_path="./results/pflows.zarr",
         hists_path="./results/hists.zarr",
         seeds_path="./results/predictions/seeds/global_overlap_overlap_unpadded",
