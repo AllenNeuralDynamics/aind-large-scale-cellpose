@@ -7,7 +7,7 @@ ARG GIT_ACCESS_TOKEN
 COPY git-askpass /
 
 RUN pip install -U --no-cache-dir \
-    git+https://github.com/AllenNeuralDynamics/aind-large-scale-prediction.git@feat-ceil-target-size \
+    git+https://github.com/AllenNeuralDynamics/aind-large-scale-prediction.git \
     scikit-image==0.22.0 \
     matplotlib \
     dask-image \
