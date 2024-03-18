@@ -59,7 +59,7 @@ def segment():
 
     # output combined gradients path and cell probabilities
     output_combined_gradients_path = f"{results_folder}/combined_gradients.zarr"
-    output_cellprob_path = "../results/combined_cellprob.zarr"
+    output_cellprob_path = f"{results_folder}/combined_cellprob.zarr"
 
     # Large-scale combination of predicted gradients
     combine_gradients(
