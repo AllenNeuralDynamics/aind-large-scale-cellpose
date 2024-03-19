@@ -13,7 +13,8 @@ import numpy as np
 import psutil
 import zarr
 from aind_large_scale_prediction.generator.dataset import create_data_loader
-from aind_large_scale_prediction.generator.utils import recover_global_position
+from aind_large_scale_prediction.generator.utils import (
+    concatenate_lazy_data, recover_global_position)
 from cellpose.core import run_net, use_gpu
 from cellpose.io import logger_setup
 from cellpose.models import CellposeModel, assign_device, transforms
@@ -124,6 +125,8 @@ def run_cellpose_net(
     data: ArrayLike,
     model: CellposeModel,
     axis: int,
+    channels: Optional[List[int]] = [0, 0],
+    z_axis: Optional[int] = 0,
     normalize: Optional[bool] = True,
     diameter: Optional[int] = 15,
     anisotropy: Optional[float] = 1.0,
@@ -160,7 +163,12 @@ def run_cellpose_net(
         Gradient prediction
     """
     data_converted = transforms.convert_image(
-        data, None, channel_axis=None, z_axis=0, do_3D=True, nchan=model.nchan
+        data,
+        channels=channels,
+        channel_axis=None,
+        z_axis=z_axis,
+        do_3D=False,
+        nchan=model.nchan,
     )
 
     if data_converted.ndim < 4:
@@ -204,8 +212,7 @@ def run_cellpose_net(
 
 
 def large_scale_cellpose_gradients_per_axis(
-    dataset_path: PathLike,
-    multiscale: str,
+    lazy_data: ArrayLike,
     output_gradients_path: PathLike,
     axis: int,
     prediction_chunksize: Tuple[int, ...],
@@ -218,6 +225,7 @@ def large_scale_cellpose_gradients_per_axis(
     normalize_image: Optional[bool] = True,
     model_name: Optional[str] = "cyto",
     cell_diameter: Optional[int] = 15,
+    cell_channels: Optional[List[int]] = [0, 0],
 ):
     """
     Large-scale cellpose prediction of gradients.
@@ -229,15 +237,8 @@ def large_scale_cellpose_gradients_per_axis(
 
     Parameters
     ----------
-    dataset_path: PathLike
-        Path where the dataset in Zarr format is located.
-        If the data is in the cloud, please provide the
-        path to it. E.g., s3://bucket-name/path/image.zarr
-
-    multiscale: str
-        Dataset name insize the zarr dataset. If the zarr
-        dataset is not organized in a folder structure,
-        please use '.'
+    lazy_data: ArrayLike
+        Loaded lazy dataset.
 
     output_gradients_path: PathLike
         Path where we want to output the estimated gradients
@@ -285,6 +286,11 @@ def large_scale_cellpose_gradients_per_axis(
     cell_diameter: Optional[int] = 15
         Cell diameter for cellpose
 
+    cell_channels: Optional[List[int]]
+        List of channels that we are going to use for prediction.
+        If background channel is on axis 0 and nuclear in channel 1,
+        then cell_channels=[0, 1]. Default: [0, 0]
+
     """
 
     co_cpus = int(utils.get_code_ocean_cpu_limit())
@@ -292,15 +298,19 @@ def large_scale_cellpose_gradients_per_axis(
     if n_workers > co_cpus:
         raise ValueError(f"Provided workers {n_workers} > current workers {co_cpus}")
 
-    logger = utils.create_logger(output_log_path=results_folder, mode="w")
+    mode = "a"
+    if axis == 0:
+        mode = "w"
+
+    logger = utils.create_logger(output_log_path=results_folder, mode=mode)
     logger.info(
         f"{20*'='} Z1 Large-Scale Cellpose Gradient Prediction in Axis {axis} {20*'='}"
     )
 
-    if not axis:
+    if axis == 0:
         utils.print_system_information(logger)
 
-    logger.info(f"Processing dataset {dataset_path} with mulsticale {multiscale}")
+    logger.info(f"Processing dataset of shape {lazy_data.shape}")
 
     # Tracking compute resources
     # Subprocess to track used resources
@@ -336,16 +346,11 @@ def large_scale_cellpose_gradients_per_axis(
         multiprocessing.set_start_method("spawn", force=True)
 
     # Overlap between prediction chunks, this overlap happens in every axis
-    overlap_prediction_chunksize = (
-        0,
-        0,
-        0,
-    )
+    overlap_prediction_chunksize = tuple([0] * len(prediction_chunksize))
 
     # Creating zarr data loader
     zarr_data_loader, zarr_dataset = create_data_loader(
-        dataset_path=dataset_path,
-        multiscale=multiscale,
+        lazy_data=lazy_data,
         target_size_mb=target_size_mb,
         prediction_chunksize=prediction_chunksize,
         overlap_prediction_chunksize=overlap_prediction_chunksize,
@@ -373,15 +378,15 @@ def large_scale_cellpose_gradients_per_axis(
                 3,
                 3,
             )
-            + zarr_dataset.lazy_data.shape,
+            + zarr_dataset.lazy_data.shape[-3:],
             chunks=(
                 1,
                 3,
             )
-            + tuple(prediction_chunksize),
+            + tuple(prediction_chunksize[-3:]),
             dtype=np.float32,
         )
-        shape = zarr_dataset.lazy_data.shape
+        shape = zarr_dataset.lazy_data.shape[-3:]
 
     else:
         # Reading back output gradients
@@ -416,7 +421,7 @@ def large_scale_cellpose_gradients_per_axis(
     )
 
     logger.info(
-        f"{20*'='} Starting estimation of cellpose combined gradients - Axis {axis} {20*'='}"
+        f"{20*'='} Starting estimation of cellpose combined gradients - Axis {axis} - Channels {cell_channels} {20*'='}"
     )
     start_time = time()
 
@@ -440,13 +445,14 @@ def large_scale_cellpose_gradients_per_axis(
             internal_slices=sample.batch_internal_slice,
         )
 
-        global_coord_pos = (slice(axis, axis + 1), slice(0, 3)) + global_coord_pos
+        global_coord_pos = (slice(axis, axis + 1), slice(0, 3)) + global_coord_pos[-3:]
 
         # Estimating plane gradient
         y = run_cellpose_net(
             data=data,
             model=model,
             axis=axis,
+            channels=cell_channels,
             normalize=normalize_image,
             diameter=15,
             anisotropy=1.0,
@@ -500,7 +506,7 @@ def large_scale_cellpose_gradients_per_axis(
 
 
 def predict_gradients(
-    dataset_path: PathLike,
+    dataset_paths: List[PathLike],
     multiscale: str,
     output_gradients_path: PathLike,
     slices_per_axis: List[int],
@@ -512,6 +518,7 @@ def predict_gradients(
     normalize_image: Optional[bool] = True,
     model_name: Optional[str] = "cyto",
     cell_diameter: Optional[int] = 15,
+    cell_channels: Optional[List[int]] = [0, 0],
 ) -> Tuple[int]:
     """
     Large-scale cellpose prediction of gradients.
@@ -523,8 +530,10 @@ def predict_gradients(
 
     Parameters
     ----------
-    dataset_path: PathLike
-        Path where the dataset in Zarr format is located.
+    dataset_paths: List[PathLike]
+        Paths where the datasets in Zarr format are located.
+        These could be background channel and nuclei channel in
+        as different zarr datasets.
         If the data is in the cloud, please provide the
         path to it. E.g., s3://bucket-name/path/image.zarr
 
@@ -572,14 +581,30 @@ def predict_gradients(
     cell_diameter: Optional[int] = 15
         Cell diameter for cellpose
 
+    cell_channels: Optional[List[int]]
+        List of channels that we are going to use for prediction.
+        If background channel is on axis 0 and nuclear in channel 1,
+        then cell_channels=[0, 1]. Default: [0, 0]
+
     Returns
     -------
     Tuple[int]
         Tuple with the shape of the original dataset
     """
+    len_datasets = len(dataset_paths)
+    lazy_data = None
 
+    if not len_datasets:
+        raise ValueError("Empty list of datasets!")
+
+    elif len_datasets:
+        lazy_data = concatenate_lazy_data(
+            dataset_paths=dataset_paths,
+            multiscale=multiscale,
+            concat_axis=-4,  # Concatenation axis
+        )
     # Reading image shape
-    image_shape = zarr.open(f"{dataset_path}/{multiscale}", "r").shape
+    image_shape = lazy_data.shape
 
     axes_names = ["XY", "ZX", "ZY"]
 
@@ -600,9 +625,12 @@ def predict_gradients(
         elif axis == 2:
             prediction_chunksize = (image_shape[-3], image_shape[-2], slice_per_axis)
 
+        # Adding the channels to the prediction chunksize
+        if len_datasets > 1:
+            prediction_chunksize = (len_datasets,) + prediction_chunksize
+
         large_scale_cellpose_gradients_per_axis(
-            dataset_path=dataset_path,
-            multiscale=multiscale,
+            lazy_data=lazy_data,
             output_gradients_path=output_gradients_path,
             axis=axis,
             prediction_chunksize=prediction_chunksize,
@@ -614,9 +642,10 @@ def predict_gradients(
             model_name=model_name,
             cell_diameter=cell_diameter,
             results_folder=results_folder,
+            cell_channels=cell_channels,
         )
 
-    return image_shape
+    return image_shape[-3:]
 
 
 def main():
@@ -647,7 +676,7 @@ def main():
 
     # Large-scale prediction of gradients
     predict_gradients(
-        dataset_path=dataset_path,
+        dataset_paths=dataset_paths,
         multiscale="2",
         output_gradients_path=output_gradients_path,
         slices_per_axis=slices_per_axis,
@@ -658,6 +687,7 @@ def main():
         normalize_image=normalize_image,
         model_name=model_name,
         cell_diameter=cell_diameter,
+        cell_channels=[0, 1],  # RN28s and Nuclei
     )
 
 

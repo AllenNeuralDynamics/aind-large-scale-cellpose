@@ -3,6 +3,7 @@ Main file to run segmentation
 """
 
 import os
+from typing import List
 
 from .cellpose_segmentation._shared.types import PathLike
 from .cellpose_segmentation.combine_gradients import combine_gradients
@@ -12,7 +13,7 @@ from .cellpose_segmentation.predict_gradients import predict_gradients
 
 
 def segment(
-    dataset_path: PathLike,
+    dataset_paths: List[PathLike],
     multiscale: str,
     results_folder: PathLike,
     data_folder: PathLike,
@@ -23,8 +24,12 @@ def segment(
 
     Parameters
     ----------
-    dataset_path: PathLike
-        Path where the data is located.
+    dataset_paths: List[PathLike]
+        Paths where the datasets in Zarr format are located.
+        These could be background channel and nuclei channel in
+        as different zarr datasets.
+        If the data is in the cloud, please provide the
+        path to it. E.g., s3://bucket-name/path/image.zarr
 
     multiscale: str
         Dataset multiscale.
@@ -39,8 +44,13 @@ def segment(
         Path of the scratch folder in Code Ocean.
 
     """
+    len_datasets = len(dataset_paths)
 
-    if os.path.exists(dataset_path) and os.path.exists(results_folder):
+    if not len_datasets:
+        ValueError("Please, provide valid paths. Empty list!")
+
+    # Validating output folder
+    if len_datasets and os.path.exists(results_folder):
 
         # Data loader params
         super_chunksize = None
@@ -58,10 +68,17 @@ def segment(
         # output gradients
         output_gradients_path = f"{results_folder}/gradients.zarr"
 
+        # channels for segmentation, we assume background channel is in 0, nuclei 1, ...
+        cell_channels = (
+            [0, 0]
+            if len(dataset_paths) == 1
+            else [i for i in range(len(dataset_paths))]
+        )
+
         # Large-scale prediction of gradients
         slices_per_axis = [40, 80, 80]
         dataset_shape = predict_gradients(
-            dataset_path=dataset_path,
+            dataset_paths=dataset_paths,
             multiscale=multiscale,
             output_gradients_path=output_gradients_path,
             slices_per_axis=slices_per_axis,
@@ -73,6 +90,7 @@ def segment(
             model_name=model_name,
             cell_diameter=cell_diameter,
             results_folder=results_folder,
+            cell_channels=cell_channels,
         )
 
         # output combined gradients path and cell probabilities

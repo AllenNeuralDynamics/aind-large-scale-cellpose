@@ -14,6 +14,7 @@ import zarr
 from aind_large_scale_prediction._shared.types import ArrayLike, PathLike
 from aind_large_scale_prediction.generator.dataset import create_data_loader
 from aind_large_scale_prediction.generator.utils import recover_global_position
+from aind_large_scale_prediction.io import ImageReaderFactory
 
 from .utils import utils
 
@@ -132,10 +133,19 @@ def combine_gradients(
         f"Overlap size based on cell diameter * 2: {overlap_prediction_chunksize}"
     )
 
+    lazy_data = (
+        ImageReaderFactory()
+        .create(
+            data_path=dataset_path,
+            parse_path=False,
+            multiscale=multiscale,
+        )
+        .as_dask_array()
+    )
+
     # Creation of zarr data loader
     zarr_data_loader, zarr_dataset = create_data_loader(
-        dataset_path=dataset_path,
-        multiscale=multiscale,
+        lazy_data=lazy_data,
         target_size_mb=target_size_mb,
         prediction_chunksize=prediction_chunksize,
         overlap_prediction_chunksize=overlap_prediction_chunksize,

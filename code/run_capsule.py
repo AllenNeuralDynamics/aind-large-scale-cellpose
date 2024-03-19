@@ -14,12 +14,17 @@ def run():
 
     # Dataset to process
     IMAGE_PATH = "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-02-09_13-28-49"
-    TILE_NAME = "channel_405.zarr"
+    BKG_CHN = "channel_405.zarr"
+    NUCLEI_CHN = "channel_3.zarr"
+
     # dataset_path = f"s3://{BUCKET_NAME}/{IMAGE_PATH}/{TILE_NAME}"
-    dataset_path = f"{data_folder}/{IMAGE_PATH}/{TILE_NAME}"
+    background_channel = f"{data_folder}/{IMAGE_PATH}/{BKG_CHN}"
+    nuclei_channel = f"{data_folder}/{IMAGE_PATH}/{NUCLEI_CHN}"
+
+    dataset_paths = [background_channel, nuclei_channel]
 
     segment(
-        dataset_path=dataset_path,
+        dataset_paths=dataset_paths,
         multiscale="2",
         results_folder=results_folder,
         data_folder=data_folder,
