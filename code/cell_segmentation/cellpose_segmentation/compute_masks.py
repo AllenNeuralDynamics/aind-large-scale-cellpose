@@ -577,17 +577,25 @@ def generate_masks(
     prediction_chunksize_overlap = np.array(prediction_chunksize) + (
         np.array(overlap_prediction_chunksize) * 2
     )
+
+    original_dataset_shape = (
+        1,
+        1,
+    ) + tuple(original_dataset_shape[-3:])
+    output_chunk_size = (
+        1,
+        1,
+    ) + tuple(prediction_chunksize[-3:])
     logger.info(f"Prediction chunksize overlap: {prediction_chunksize_overlap}")
+    logger.info(
+        f"Original dataset shape: {original_dataset_shape} - output chunksize: {output_chunk_size}"
+    )
 
     output_seg_masks = zarr.open(
         output_seg_mask_path,
         "w",
         shape=original_dataset_shape,  # tuple(zarr_dataset.lazy_data.shape[-3:]),
-        chunks=(
-            1,
-            1,
-        )
-        + tuple(prediction_chunksize[-3:]),
+        chunks=output_chunk_size,
         dtype=np.int32,
     )
 

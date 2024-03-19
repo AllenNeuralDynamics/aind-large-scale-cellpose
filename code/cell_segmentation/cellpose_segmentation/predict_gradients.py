@@ -605,6 +605,7 @@ def predict_gradients(
         )
     # Reading image shape
     image_shape = lazy_data.shape
+    factor = 6
 
     axes_names = ["XY", "ZX", "ZY"]
 
@@ -614,20 +615,37 @@ def predict_gradients(
 
         slice_per_axis = slices_per_axis[axis]
         prediction_chunksize = None
+        super_chunksize = None
 
         # Setting prediction chunksize to entire planes using the number of slices per axis
         if axis == 0:
             prediction_chunksize = (slice_per_axis, image_shape[-2], image_shape[-1])
+            super_chunksize = (
+                slice_per_axis * factor,
+                image_shape[-2],
+                image_shape[-1],
+            )
 
         elif axis == 1:
             prediction_chunksize = (image_shape[-3], slice_per_axis, image_shape[-1])
+            super_chunksize = (
+                image_shape[-3],
+                slice_per_axis * factor,
+                image_shape[-1],
+            )
 
         elif axis == 2:
             prediction_chunksize = (image_shape[-3], image_shape[-2], slice_per_axis)
+            super_chunksize = (
+                image_shape[-3],
+                image_shape[-2],
+                slice_per_axis * factor,
+            )
 
         # Adding the channels to the prediction chunksize
         if len_datasets > 1:
             prediction_chunksize = (len_datasets,) + prediction_chunksize
+            super_chunksize = (len_datasets,) + super_chunksize
 
         large_scale_cellpose_gradients_per_axis(
             lazy_data=lazy_data,
