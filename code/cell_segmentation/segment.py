@@ -3,12 +3,13 @@ Main file to run segmentation
 """
 
 import os
-from typing import List
+from typing import List, Optional
 
 from .cellpose_segmentation._shared.types import PathLike
 from .cellpose_segmentation.combine_gradients import combine_gradients
 from .cellpose_segmentation.compute_flows import generate_flows_and_centroids
 from .cellpose_segmentation.compute_masks import generate_masks
+from .cellpose_segmentation.compute_percentiles import compute_percentiles
 from .cellpose_segmentation.predict_gradients import predict_gradients
 
 
@@ -18,6 +19,7 @@ def segment(
     results_folder: PathLike,
     data_folder: PathLike,
     scratch_folder: PathLike,
+    global_normalization: Optional[bool] = True,
 ):
     """
     Segments a Z1 dataset.
@@ -43,6 +45,9 @@ def segment(
     scratch_folder: PathLike
         Path of the scratch folder in Code Ocean.
 
+    global_normalization: Optional[bool]
+        True if we want to compute the normalization
+        based on the whole dataset. Default: True
     """
     len_datasets = len(dataset_paths)
 
@@ -60,9 +65,8 @@ def segment(
 
         # Cellpose params
         model_name = "cyto"
-        normalize_image = True  # TODO Normalize image in the entire dataset
         cell_diameter = 15
-        min_cell_volume = 0
+        min_cell_volume = 95
         flow_threshold = 0.0
 
         # output gradients
@@ -86,7 +90,7 @@ def segment(
             n_workers=n_workers,
             batch_size=batch_size,
             super_chunksize=super_chunksize,
-            normalize_image=normalize_image,
+            global_normalization=global_normalization,
             model_name=model_name,
             cell_diameter=cell_diameter,
             results_folder=results_folder,

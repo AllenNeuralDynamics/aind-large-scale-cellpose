@@ -6,7 +6,7 @@ are ZY, ZX and XY.
 
 import multiprocessing
 from time import time
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import psutil
@@ -120,15 +120,59 @@ def run_2D_cellpose(
     return y, style
 
 
+def percentile_normalization(
+    data: ArrayLike, chn_percentiles: Dict, channels: List[int, int]
+) -> ArrayLike:
+    """
+    Performs percentile normalization based on
+    global computed percentiles.
+
+    Parameters
+    ----------
+    data: ArrayLike
+        Data to be normalized.
+
+    chn_percentiles: Dict
+        Dictionary with the percentiles.
+
+    channels: List[int, int]
+        Channel ids to compute the percentile
+        normalization on.
+
+    Returns
+    -------
+    ArrayLike
+        Normalized data
+    """
+
+    norm_data = data.copy().astype(np.float32)
+
+    if data.shape[0] != len(channels):
+        raise ValueError("Please, provide the background and nuclear channels")
+
+    # Correcting the channels based on channel percentiles
+    for chn_idx in channels:
+        curr_percentiles = chn_percentiles[chn_idx]
+        norm_data[chn_idx, ...] = np.maximum(
+            norm_data[chn_idx, ...], curr_percentiles[0]
+        )
+        norm_data[chn_idx, ...] = (norm_data[chn_idx, ...] - curr_percentiles[0]) / (
+            curr_percentiles[1] - curr_percentiles[0]
+        )
+
+    return norm_data
+
+
 def run_cellpose_net(
     data: ArrayLike,
     model: CellposeModel,
     axis: int,
     channels: Optional[List[int]] = [0, 0],
     z_axis: Optional[int] = 0,
-    normalize: Optional[bool] = True,
+    normalize: Optional[bool] = False,
     diameter: Optional[int] = 15,
     anisotropy: Optional[float] = 1.0,
+    channel_percentiles: Optional[Dict] = None,
 ) -> ArrayLike:
     """
     Runs cellpose in stacks of 2D images.
@@ -147,7 +191,9 @@ def run_cellpose_net(
     normalize: Optional[bool]
         If we want to normalize the data
         using percentile normalization.
-        Default: True
+        If False, please provide percentiles for
+        the channels. These can be globally computed.
+        Default: False
 
     diameter: Optional[int]
         Mean cell diameter
@@ -155,6 +201,11 @@ def run_cellpose_net(
 
     anisotropy: Optional[float]
         Anisotropy factor
+
+    channel_percentiles: Optional[List[float, float]]
+        Precomputed channel percentiles. This is a list
+        that contains the min and max values of the entire dataset
+        based on the chunked percentile estimation.
 
     Returns
     -------
@@ -193,7 +244,19 @@ def run_cellpose_net(
     }
 
     x = np.asarray(data_converted)
-    x = transforms.normalize_img(x, **normalize_default)
+
+    if normalize:
+        # Local normalization
+        x = transforms.normalize_img(x, **normalize_default)
+
+    elif channel_percentiles is not None:
+        # global normalization using global percentiles
+        x = percentile_normalization(
+            data=x, percentiles=channel_percentiles, channels=channels
+        )
+
+    else:
+        raise ValueError("Please, check the normalization method.")
 
     y, style = run_2D_cellpose(
         net=model.net,
@@ -221,7 +284,7 @@ def large_scale_cellpose_gradients_per_axis(
     results_folder: PathLike,
     super_chunksize: Optional[Tuple[int, ...]] = None,
     lazy_callback_fn: Optional[Callable[[ArrayLike], ArrayLike]] = None,
-    normalize_image: Optional[bool] = True,
+    global_normalization: Optional[bool] = True,
     model_name: Optional[str] = "cyto",
     cell_diameter: Optional[int] = 15,
     cell_channels: Optional[List[int]] = [0, 0],
@@ -276,7 +339,7 @@ def large_scale_cellpose_gradients_per_axis(
         before they are sent to the GPU for prediction. E.g., we might need
         to run deskewing before we run prediction.
 
-    normalize_image: Optional[bool] = True
+    global_normalization: Optional[bool] = True
         If we want to normalize the data for cellpose.
 
     model_name: Optional[str] = "cyto"
@@ -422,6 +485,8 @@ def large_scale_cellpose_gradients_per_axis(
     logger.info(
         f"{20*'='} Starting estimation of cellpose combined gradients - Axis {axis} - Channels {cell_channels} {20*'='}"
     )
+
+    local_normalization = False if global_normalization else True
     start_time = time()
 
     # Processing entire dataset
@@ -452,9 +517,10 @@ def large_scale_cellpose_gradients_per_axis(
             model=model,
             axis=axis,
             channels=cell_channels,
-            normalize=normalize_image,
+            normalize=local_normalization,
             diameter=15,
             anisotropy=1.0,
+            channel_percentiles=channel_percentiles,
         )
 
         global_coord_pos = list(global_coord_pos)
@@ -514,7 +580,7 @@ def predict_gradients(
     batch_size: int,
     results_folder: PathLike,
     super_chunksize: Optional[Tuple[int, ...]] = None,
-    normalize_image: Optional[bool] = True,
+    global_normalization: Optional[bool] = True,
     model_name: Optional[str] = "cyto",
     cell_diameter: Optional[int] = 15,
     cell_channels: Optional[List[int]] = [0, 0],
@@ -571,7 +637,7 @@ def predict_gradients(
         Super chunk size. Could be None if target_size_mb is provided.
         Default: None
 
-    normalize_image: Optional[bool] = True
+    global_normalization: Optional[bool] = True
         If we want to normalize the data for cellpose.
 
     model_name: Optional[str] = "cyto"
@@ -655,7 +721,7 @@ def predict_gradients(
             n_workers=n_workers,
             batch_size=batch_size,
             super_chunksize=super_chunksize,
-            normalize_image=normalize_image,
+            global_normalization=global_normalization,
             model_name=model_name,
             cell_diameter=cell_diameter,
             results_folder=results_folder,
@@ -683,7 +749,7 @@ def main():
 
     # Cellpose params
     model_name = "cyto"
-    normalize_image = True  # TODO Normalize image in the entire dataset
+    global_normalization = True  # TODO Normalize image in the entire dataset
     cell_diameter = 15
 
     slices_per_axis = [40, 80, 80]
@@ -701,7 +767,7 @@ def main():
         n_workers=n_workers,
         batch_size=batch_size,
         super_chunksize=super_chunksize,
-        normalize_image=normalize_image,
+        global_normalization=global_normalization,
         model_name=model_name,
         cell_diameter=cell_diameter,
         cell_channels=[0, 0],  # RN28s and Nuclei

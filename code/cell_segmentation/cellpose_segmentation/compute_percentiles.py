@@ -63,7 +63,7 @@ def get_channel_percentiles(
     return percentiles
 
 
-def compute_global_percentiles(
+def compute_chunked_percentiles(
     lazy_data: ArrayLike,
     target_size_mb: int,
     percentile_range: Tuple[float, float],
@@ -189,6 +189,65 @@ def combine_percentiles(percentiles: Dict, method: Optional[str] = "min_max") ->
     return combined_percentiles
 
 
+def compute_percentiles(
+    lazy_data: ArrayLike,
+    target_size_mb: int,
+    percentile_range: Tuple[float, float],
+    min_vox_size: Optional[int] = 0,
+    n_workers: Optional[int] = 0,
+    threads_per_worker: Optional[int] = 1,
+    combine_method: Optional[str] = "median",
+) -> Tuple[Dict, Dict]:
+    """
+    lazy_data: ArrayLike
+        Loaded lazy array. This could be a multichannel
+        lazy array in which case, percentiles will be computed
+        per channel.
+
+    target_size_mb: int
+        Size to fit the current data in memory.
+
+    percentile_range: Tuple[float, float]
+        Percentile range to compute.
+
+    min_vox_size: Optional[int]
+        Minimum voxel value. Default: 0
+
+    n_workers: Optional[int]
+        Number of workers. Recommended to number of CPUs.
+        Default: 0
+
+    threads_per_worker: Optional[int]
+        Threads per worker. Default: 1
+
+    combine_method: Optional[str]
+        Combination method for the percentiles.
+        Default: 'median'
+
+    Returns
+    -------
+    Dict
+        Dictionary with the computed percentiles per channel.
+        Each channel contains keys to the loaded chunks and
+        computed percentiles.
+    """
+
+    percentiles = compute_percentiles(
+        lazy_data=lazy_data,
+        target_size_mb=target_size_mb,
+        percentile_range=percentile_range,
+        min_vox_size=min_vox_size,
+        n_workers=n_workers,
+        threads_per_worker=threads_per_worker,
+    )
+
+    combined_percentiles = combine_percentiles(
+        percentiles=percentiles, method=combine_method
+    )
+
+    return combined_percentiles, percentiles
+
+
 def main():
     """Main function to compute percentiles"""
 
@@ -205,22 +264,20 @@ def main():
     )
 
     start_time = time.time()
-    percentiles = compute_global_percentiles(
+    combined_percentiles, chunked_percentiles = compute_percentiles(
         lazy_data=lazy_data,
         target_size_mb=target_size_mb,
         percentile_range=(10, 99),
         min_vox_size=95,
         n_workers=n_workers,
         threads_per_worker=1,
+        combine_method="median",
     )
+
     end_time = time.time()
 
     print(f"Time to compute percentiles: {end_time - start_time}")
-    print(f"Percentiles: {percentiles}")
-
-    combined_percentiles = combine_percentiles(
-        percentiles=percentiles.copy(), method="min_max"
-    )
+    print(f"Percentiles: {chunked_percentiles}")
 
     print(f"Combined percentiles: {combined_percentiles}")
 
