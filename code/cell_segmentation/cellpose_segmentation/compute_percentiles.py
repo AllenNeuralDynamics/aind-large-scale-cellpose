@@ -19,7 +19,7 @@ def get_channel_percentiles(
     array: ArrayLike,
     block_shape: Tuple[int],
     percentile_range: Tuple[float, float],
-    min_vox_size: Optional[float] = 0,
+    min_cell_volume: Optional[float] = 0,
 ):
     """
     Partitions the last 3 dimensions of a Dask array into non-overlapping blocks and computes the percentile.
@@ -35,7 +35,7 @@ def get_channel_percentiles(
     percentile_range: Tuple[float, float]
         Percentile range to compute.
 
-    min_vox_size: Optional[float]
+    min_cell_volume: Optional[float]
         Minimum value in the array data.
         Default = 0.
 
@@ -54,7 +54,7 @@ def get_channel_percentiles(
     for sl in slices_to_process:
 
         block = array[sl]
-        block = block[block > min_vox_size]
+        block = block[block > min_cell_volume]
         percentiled_block = da.percentile(block, percentile_range, method="linear")
         min_max_values = percentiled_block.compute()
 
@@ -67,7 +67,7 @@ def compute_chunked_percentiles(
     lazy_data: ArrayLike,
     target_size_mb: int,
     percentile_range: Tuple[float, float],
-    min_vox_size: Optional[int] = 0,
+    min_cell_volume: Optional[int] = 0,
     n_workers: Optional[int] = 0,
     threads_per_worker: Optional[int] = 1,
 ) -> Dict:
@@ -83,7 +83,7 @@ def compute_chunked_percentiles(
     percentile_range: Tuple[float, float]
         Percentile range to compute.
 
-    min_vox_size: Optional[int]
+    min_cell_volume: Optional[int]
         Minimum voxel value. Default: 0
 
     n_workers: Optional[int]
@@ -120,6 +120,7 @@ def compute_chunked_percentiles(
     percentiles = {}
     for ch_axis in range(lazy_data.shape[-4]):
 
+        print(f"Processing channel: {ch_axis} - Cluster: {cluster}")
         chn_lazy_data = lazy_data[ch_axis, ...]
         # Block shape to process
         block_shape = list(
@@ -133,7 +134,7 @@ def compute_chunked_percentiles(
             array=chn_lazy_data,
             block_shape=block_shape,
             percentile_range=percentile_range,
-            min_vox_size=min_vox_size,
+            min_cell_volume=min_cell_volume,
         )
         percentiles[ch_axis] = chn_percentiles
 
@@ -193,7 +194,7 @@ def compute_percentiles(
     lazy_data: ArrayLike,
     target_size_mb: int,
     percentile_range: Tuple[float, float],
-    min_vox_size: Optional[int] = 0,
+    min_cell_volume: Optional[int] = 0,
     n_workers: Optional[int] = 0,
     threads_per_worker: Optional[int] = 1,
     combine_method: Optional[str] = "median",
@@ -210,7 +211,7 @@ def compute_percentiles(
     percentile_range: Tuple[float, float]
         Percentile range to compute.
 
-    min_vox_size: Optional[int]
+    min_cell_volume: Optional[int]
         Minimum voxel value. Default: 0
 
     n_workers: Optional[int]
@@ -232,11 +233,11 @@ def compute_percentiles(
         computed percentiles.
     """
 
-    percentiles = compute_percentiles(
+    percentiles = compute_chunked_percentiles(
         lazy_data=lazy_data,
         target_size_mb=target_size_mb,
         percentile_range=percentile_range,
-        min_vox_size=min_vox_size,
+        min_cell_volume=min_cell_volume,
         n_workers=n_workers,
         threads_per_worker=threads_per_worker,
     )
@@ -268,7 +269,7 @@ def main():
         lazy_data=lazy_data,
         target_size_mb=target_size_mb,
         percentile_range=(10, 99),
-        min_vox_size=95,
+        min_cell_volume=95,
         n_workers=n_workers,
         threads_per_worker=1,
         combine_method="median",

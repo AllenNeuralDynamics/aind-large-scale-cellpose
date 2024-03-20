@@ -19,6 +19,7 @@ from cellpose.io import logger_setup
 from cellpose.models import CellposeModel, assign_device, transforms
 
 from ._shared.types import ArrayLike, PathLike
+from .compute_percentiles import compute_percentiles
 from .utils import utils
 
 
@@ -121,7 +122,7 @@ def run_2D_cellpose(
 
 
 def percentile_normalization(
-    data: ArrayLike, chn_percentiles: Dict, channels: List[int, int]
+    data: ArrayLike, chn_percentiles: Dict, channels: List[int]
 ) -> ArrayLike:
     """
     Performs percentile normalization based on
@@ -147,16 +148,15 @@ def percentile_normalization(
 
     norm_data = data.copy().astype(np.float32)
 
-    if data.shape[0] != len(channels):
-        raise ValueError("Please, provide the background and nuclear channels")
+    # After converting the image, the channels are at the end
 
     # Correcting the channels based on channel percentiles
     for chn_idx in channels:
         curr_percentiles = chn_percentiles[chn_idx]
-        norm_data[chn_idx, ...] = np.maximum(
-            norm_data[chn_idx, ...], curr_percentiles[0]
+        norm_data[..., chn_idx] = np.maximum(
+            norm_data[..., chn_idx], curr_percentiles[0]
         )
-        norm_data[chn_idx, ...] = (norm_data[chn_idx, ...] - curr_percentiles[0]) / (
+        norm_data[..., chn_idx] = (norm_data[..., chn_idx] - curr_percentiles[0]) / (
             curr_percentiles[1] - curr_percentiles[0]
         )
 
@@ -212,17 +212,12 @@ def run_cellpose_net(
     ArrayLike
         Gradient prediction
     """
-    data_converted = transforms.convert_image(
-        data,
-        channels=channels,
-        channel_axis=None,
-        z_axis=z_axis,
-        do_3D=False,
-        nchan=model.nchan,
-    )
 
-    if data_converted.ndim < 4:
-        data_converted = data_converted[np.newaxis, ...]
+    if data.ndim == 3:
+        data = np.expand_dims(data, axis=0)
+        data = np.concatenate((data, np.zeros_like(data)), axis=0)
+
+    data_converted = data.transpose((1, 2, 3, 0))
 
     if diameter is not None and diameter > 0:
         rescale = model.diam_mean / diameter
@@ -231,28 +226,28 @@ def run_cellpose_net(
         diameter = model.diam_labels
         rescale = model.diam_mean / diameter
 
-    normalize_default = {
-        "lowhigh": None,
-        "percentile": None,
-        "normalize": normalize,
-        "norm3D": False,
-        "sharpen_radius": 0,
-        "smooth_radius": 0,
-        "tile_norm_blocksize": 0,
-        "tile_norm_smooth3D": 1,
-        "invert": False,
-    }
-
     x = np.asarray(data_converted)
 
     if normalize:
+        # Local normalization, not accessed if global norm is computed
+        normalize_default = {
+            "lowhigh": None,
+            "percentile": None,
+            "normalize": normalize,
+            "norm3D": False,
+            "sharpen_radius": 0,
+            "smooth_radius": 0,
+            "tile_norm_blocksize": 0,
+            "tile_norm_smooth3D": 1,
+            "invert": False,
+        }
         # Local normalization
         x = transforms.normalize_img(x, **normalize_default)
 
     elif channel_percentiles is not None:
         # global normalization using global percentiles
         x = percentile_normalization(
-            data=x, percentiles=channel_percentiles, channels=channels
+            data=x, chn_percentiles=channel_percentiles, channels=np.unique(channels)
         )
 
     else:
@@ -288,6 +283,7 @@ def large_scale_cellpose_gradients_per_axis(
     model_name: Optional[str] = "cyto",
     cell_diameter: Optional[int] = 15,
     cell_channels: Optional[List[int]] = [0, 0],
+    chn_percentiles: Optional[Dict] = None,
 ):
     """
     Large-scale cellpose prediction of gradients.
@@ -352,6 +348,9 @@ def large_scale_cellpose_gradients_per_axis(
         List of channels that we are going to use for prediction.
         If background channel is on axis 0 and nuclear in channel 1,
         then cell_channels=[0, 1]. Default: [0, 0]
+
+    chn_percentiles: Optional[Dict]
+        Dataset percentiles
 
     """
 
@@ -520,7 +519,7 @@ def large_scale_cellpose_gradients_per_axis(
             normalize=local_normalization,
             diameter=15,
             anisotropy=1.0,
-            channel_percentiles=channel_percentiles,
+            channel_percentiles=chn_percentiles,
         )
 
         global_coord_pos = list(global_coord_pos)
@@ -584,6 +583,8 @@ def predict_gradients(
     model_name: Optional[str] = "cyto",
     cell_diameter: Optional[int] = 15,
     cell_channels: Optional[List[int]] = [0, 0],
+    min_cell_volume: Optional[int] = 95,
+    percentile_range: Optional[Tuple[float, float]] = (10, 99),
 ) -> Tuple[int]:
     """
     Large-scale cellpose prediction of gradients.
@@ -668,6 +669,24 @@ def predict_gradients(
             multiscale=multiscale,
             concat_axis=-4,  # Concatenation axis
         )
+        print("Combined background and nuclear channel: ", lazy_data, lazy_data.dtype)
+
+    combined_percentiles = None
+    if global_normalization:
+        print(f"Computing global percentiles...")
+        combined_percentiles, chunked_percentiles = compute_percentiles(
+            lazy_data=lazy_data,
+            target_size_mb=target_size_mb,
+            percentile_range=percentile_range,
+            min_cell_volume=min_cell_volume,
+            n_workers=16,
+            threads_per_worker=1,
+            combine_method="median",
+        )
+        print("Estimated global percentiles: ", combined_percentiles)
+        np.save(f"{results_folder}/combined_percentiles.npy", combined_percentiles)
+        np.save(f"{results_folder}/chunked_percentiles.npy", chunked_percentiles)
+
     # Reading image shape
     image_shape = lazy_data.shape
     factor = 6
@@ -726,6 +745,7 @@ def predict_gradients(
             cell_diameter=cell_diameter,
             results_folder=results_folder,
             cell_channels=cell_channels,
+            chn_percentiles=combined_percentiles,
         )
 
     return image_shape[-3:]

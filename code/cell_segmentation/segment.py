@@ -9,7 +9,6 @@ from .cellpose_segmentation._shared.types import PathLike
 from .cellpose_segmentation.combine_gradients import combine_gradients
 from .cellpose_segmentation.compute_flows import generate_flows_and_centroids
 from .cellpose_segmentation.compute_masks import generate_masks
-from .cellpose_segmentation.compute_percentiles import compute_percentiles
 from .cellpose_segmentation.predict_gradients import predict_gradients
 
 
@@ -59,7 +58,7 @@ def segment(
 
         # Data loader params
         super_chunksize = None
-        target_size_mb = 3072  # None
+        target_size_mb = 4096  # None
         n_workers = 0  # 16
         batch_size = 1
 
@@ -67,6 +66,7 @@ def segment(
         model_name = "cyto"
         cell_diameter = 15
         min_cell_volume = 95
+        percentile_range = (10, 99)
         flow_threshold = 0.0
 
         # output gradients
@@ -95,6 +95,8 @@ def segment(
             cell_diameter=cell_diameter,
             results_folder=results_folder,
             cell_channels=cell_channels,
+            min_cell_volume=min_cell_volume,
+            percentile_range=percentile_range,
         )
 
         # output combined gradients path and cell probabilities
