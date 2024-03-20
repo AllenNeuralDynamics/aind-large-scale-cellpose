@@ -108,7 +108,7 @@ def combine_gradients(
     profile_process.daemon = True
     profile_process.start()
 
-    ## Creating zarr data loader
+    # Creating zarr data loader
     logger.info("Creating chunked data loader")
     shm_memory = psutil.virtual_memory()
     logger.info(f"Shared memory information: {shm_memory}")

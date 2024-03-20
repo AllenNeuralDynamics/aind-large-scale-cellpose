@@ -5,7 +5,6 @@ are ZY, ZX and XY.
 """
 
 import multiprocessing
-import os
 from time import time
 from typing import Callable, List, Optional, Tuple
 
@@ -607,7 +606,7 @@ def predict_gradients(
     image_shape = lazy_data.shape
     factor = 6
 
-    axes_names = ["XY", "ZX", "ZY"]
+    # axes_names = ["XY", "ZX", "ZY"]
 
     # Processing each plane at a time. This could be faster if you have more
     # GPUs, we are currently running this on a single GPU machine.
@@ -694,7 +693,7 @@ def main():
 
     # Large-scale prediction of gradients
     predict_gradients(
-        dataset_paths=dataset_paths,
+        dataset_paths=[dataset_path],
         multiscale="2",
         output_gradients_path=output_gradients_path,
         slices_per_axis=slices_per_axis,
@@ -705,7 +704,7 @@ def main():
         normalize_image=normalize_image,
         model_name=model_name,
         cell_diameter=cell_diameter,
-        cell_channels=[0, 1],  # RN28s and Nuclei
+        cell_channels=[0, 0],  # RN28s and Nuclei
     )
 
 

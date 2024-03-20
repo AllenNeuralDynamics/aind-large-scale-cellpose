@@ -5,7 +5,6 @@ This operation needs to happen between overlapping
 """
 
 import multiprocessing
-import os
 from time import time
 from typing import Callable, Optional, Tuple
 
@@ -201,7 +200,7 @@ def generate_flows_and_centroids(
     profile_process.daemon = True
     profile_process.start()
 
-    ## Creating zarr data loader
+    # Creating zarr data loader
     logger.info("Creating chunked data loader")
     shm_memory = psutil.virtual_memory()
     logger.info(f"Shared memory information: {shm_memory}")
@@ -287,7 +286,9 @@ def generate_flows_and_centroids(
         np.prod(zarr_dataset.prediction_chunksize) * batch_size
     )
     samples_per_iter = n_workers * batch_size
-    logger.info(f"Number of batches: {total_batches}")
+    logger.info(
+        f"Number of batches: {total_batches} - Samples per iteration: {samples_per_iter}"
+    )
 
     logger.info(f"{20*'='} Starting combination of gradients {20*'='}")
     start_time = time()
@@ -327,7 +328,7 @@ def generate_flows_and_centroids(
             f"Batch {i}: Saving pflows from {global_coord_pos} to {unpadded_global_slice}. Pshape: {pflows_non_overlaped.shape}"
         )
 
-        logger.info(f"Computing histogram in overlapping chunks")
+        logger.info("Computing histogram in overlapping chunks")
         # Computing overlapping histogram and pixel seed finding
         global_seeds_overlp, local_seeds_overlp, hist_no_overlp = (
             computing_overlapping_hist_and_seed_finding(
@@ -420,6 +421,8 @@ def main(
         batch_size=batch_size,
         super_chunksize=super_chunksize,
     )
+
+    print(f"Output of global seeds: {global_seeds_folder}")
 
 
 if __name__ == "__main__":

@@ -524,7 +524,7 @@ def generate_masks(
     profile_process.daemon = True
     profile_process.start()
 
-    ## Creating zarr data loader
+    # Creating zarr data loader
     logger.info("Creating chunked data loader")
     shm_memory = psutil.virtual_memory()
     logger.info(f"Shared memory information: {shm_memory}")
@@ -610,7 +610,9 @@ def generate_masks(
         np.prod(zarr_dataset.prediction_chunksize) * batch_size
     )
     samples_per_iter = n_workers * batch_size
-    logger.info(f"Number of batches: {total_batches}")
+    logger.info(
+        f"Number of batches: {total_batches} - Samples per iteration: {samples_per_iter}"
+    )
 
     logger.info(f"{20*'='} Starting mask generation {20*'='}")
     start_time = time()
