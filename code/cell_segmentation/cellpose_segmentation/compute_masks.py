@@ -10,7 +10,7 @@ import multiprocessing
 import os
 from glob import glob
 from time import time
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional, Tuple, Type
 
 import fastremap
 import numpy as np
@@ -401,6 +401,47 @@ def extract_global_to_local(
     return picked_global_ids_with_cells
 
 
+def get_output_seg_data_type(n_cells: int) -> Type:
+    """
+    Gets the output data type for the segmentation zarr.
+    This is important since we need to upscale the masks to
+    the high resolution data to be able to detect RNA.
+
+    Parameters
+    ----------
+    n_cells: int
+        Number of detected cells
+
+    Returns
+    -------
+    Type
+        Numpy data type
+    """
+
+    max_uint_16 = np.iinfo(np.uint16).max + 1
+    max_uint_32 = np.iinfo(np.uint32).max + 1
+    max_uint_64 = np.iinfo(np.uint64).max + 1
+
+    selected_dtype = None
+
+    # Cell id range 0 - 65535
+    if n_cells < max_uint_16:
+        selected_dtype = np.uint16
+
+    # Cell id range 0 - 4294967295
+    elif n_cells < max_uint_32:
+        selected_dtype = np.uint32
+
+    # Cell id range 0 - 18446744073709551615
+    elif n_cells < max_uint_64:
+        selected_dtype = np.uint64
+
+    else:
+        raise NotImplementedError("Data type not implemented!")
+
+    return selected_dtype
+
+
 def generate_masks(
     dataset_path: PathLike,
     multiscale: str,
@@ -478,6 +519,7 @@ def generate_masks(
     """
 
     global_seeds = None
+    output_seg_dtype = None
     if os.path.exists(cell_centroids_path):
         global_regex = f"{cell_centroids_path}/global_seeds_*.npy"
         global_seeds = [np.load(gs) for gs in glob(global_regex)]
@@ -486,6 +528,8 @@ def generate_masks(
         global_seeds = global_seeds[indices]
 
         n_ids = np.arange(1, 1 + global_seeds.shape[0])
+
+        output_seg_dtype = np.uint32  # get_output_seg_data_type(n_cells=n_ids.shape[0])
         global_seeds = np.vstack((global_seeds.T, n_ids)).T
 
     else:
@@ -596,7 +640,7 @@ def generate_masks(
         "w",
         shape=original_dataset_shape,  # tuple(zarr_dataset.lazy_data.shape[-3:]),
         chunks=output_chunk_size,
-        dtype=np.int32,
+        dtype=output_seg_dtype,
     )
 
     hists = zarr.open(hists_path, "r")
