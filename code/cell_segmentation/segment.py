@@ -58,7 +58,7 @@ def segment(
 
         # Data loader params
         super_chunksize = None
-        target_size_mb = 4096  # None
+        target_size_mb = 3072  # None
         n_workers = 0  # 16
         batch_size = 1
 
