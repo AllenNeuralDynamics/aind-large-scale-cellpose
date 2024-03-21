@@ -12,7 +12,33 @@ from aind_large_scale_prediction.generator.utils import concatenate_lazy_data
 from aind_large_scale_prediction.generator.zarr_slice_generator import \
     BlockedZarrArrayIterator
 from aind_large_scale_prediction.io import extract_data
+from dask import config as da_cfg
 from distributed import Client, LocalCluster
+
+
+def set_dask_config(dask_folder: str):
+    """
+    Sets dask configuration
+
+    Parameters
+    ----------
+    dask_folder: str
+        Path to the temporary directory and local directory
+        of workers in dask.
+    """
+    # Setting dask configuration
+    da_cfg.set(
+        {
+            "temporary-directory": dask_folder,
+            "local_directory": dask_folder,
+            # "tcp-timeout": "300s",
+            "array.chunk-size": "128MiB",
+            "distributed.worker.memory.target": 0.90,  # 0.85,
+            "distributed.worker.memory.spill": 0.92,  # False,#
+            "distributed.worker.memory.pause": 0.95,  # False,#
+            "distributed.worker.memory.terminate": 0.98,
+        }
+    )
 
 
 def get_channel_percentiles(
@@ -138,7 +164,7 @@ def compute_chunked_percentiles(
         )
         percentiles[ch_axis] = chn_percentiles
 
-    client.close()
+    client.shutdown()
 
     return percentiles
 
@@ -194,6 +220,7 @@ def compute_percentiles(
     lazy_data: ArrayLike,
     target_size_mb: int,
     percentile_range: Tuple[float, float],
+    dask_folder: str,
     min_cell_volume: Optional[int] = 0,
     n_workers: Optional[int] = 0,
     threads_per_worker: Optional[int] = 1,
@@ -210,6 +237,9 @@ def compute_percentiles(
 
     percentile_range: Tuple[float, float]
         Percentile range to compute.
+
+    dask_folder: str
+        Path to the dask default folder.
 
     min_cell_volume: Optional[int]
         Minimum voxel value. Default: 0
@@ -232,6 +262,7 @@ def compute_percentiles(
         Each channel contains keys to the loaded chunks and
         computed percentiles.
     """
+    set_dask_config(dask_folder=dask_folder)
 
     percentiles = compute_chunked_percentiles(
         lazy_data=lazy_data,

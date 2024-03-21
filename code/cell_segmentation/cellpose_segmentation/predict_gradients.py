@@ -393,7 +393,9 @@ def large_scale_cellpose_gradients_per_axis(
     profile_process.start()
 
     # Creating zarr data loader
-    logger.info("Creating chunked data loader")
+    logger.info(
+        f"Creating chunked data loader for {lazy_data} - chunks {lazy_data.chunksize}"
+    )
     shm_memory = psutil.virtual_memory()
     logger.info(f"Shared memory information: {shm_memory}")
 
@@ -578,6 +580,7 @@ def predict_gradients(
     n_workers: int,
     batch_size: int,
     results_folder: PathLike,
+    scratch_folder: PathLike,
     super_chunksize: Optional[Tuple[int, ...]] = None,
     global_normalization: Optional[bool] = True,
     model_name: Optional[str] = "cyto",
@@ -634,6 +637,10 @@ def predict_gradients(
         Path where the results folder for cell segmentation
         is located.
 
+    scratch_folder: PathLike
+        Path where the scratch folder for cell segmentation
+        is located.
+
     super_chunksize: Optional[Tuple[int, ...]]
         Super chunk size. Could be None if target_size_mb is provided.
         Default: None
@@ -677,6 +684,7 @@ def predict_gradients(
         combined_percentiles, chunked_percentiles = compute_percentiles(
             lazy_data=lazy_data,
             target_size_mb=target_size_mb,
+            dask_folder=scratch_folder,
             percentile_range=percentile_range,
             min_cell_volume=min_cell_volume,
             n_workers=16,

@@ -80,7 +80,7 @@ def segment(
         )
 
         # Large-scale prediction of gradients
-        slices_per_axis = [40, 80, 80]
+        slices_per_axis = [5, 10, 10]
         dataset_shape = predict_gradients(
             dataset_paths=dataset_paths,
             multiscale=multiscale,
@@ -94,6 +94,7 @@ def segment(
             model_name=model_name,
             cell_diameter=cell_diameter,
             results_folder=results_folder,
+            scratch_folder=scratch_folder,
             cell_channels=cell_channels,
             min_cell_volume=min_cell_volume,
             percentile_range=percentile_range,
