@@ -13,8 +13,8 @@ def run():
     scratch_folder = os.path.abspath("../data")
 
     # Dataset to process
-    IMAGE_PATH = "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-02-09_13-28-49"
-    # "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-03-18_17-25-52"
+    IMAGE_PATH = "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-03-18_17-25-52"
+    # "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-02-09_13-28-49"
     BKG_CHN = "channel_405.zarr"
     NUCLEI_CHN = "channel_3.zarr"
 
@@ -26,7 +26,7 @@ def run():
 
     segment(
         dataset_paths=dataset_paths,
-        multiscale="3",
+        multiscale="2",
         results_folder=results_folder,
         data_folder=data_folder,
         scratch_folder=scratch_folder,
