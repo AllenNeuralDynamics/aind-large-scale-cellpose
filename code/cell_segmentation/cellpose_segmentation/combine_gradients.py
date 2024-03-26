@@ -29,6 +29,35 @@ def execute_worker(
     output_combined_gradients,
     logger,
 ):
+    """
+    Function that executes each worker. It takes
+    the predicted gradients, combines and generates
+    the cell probability zarr and combined gradient zarr.
+
+    Parameters
+    ----------
+    data: ArrayLike
+        Data to process.
+
+    batch_super_chunk: Tuple[slice]
+        Slices of the super chunk loaded in shared memory.
+
+    batch_internal_slice: Tuple[slice]
+        Internal slice of the current chunk of data. This
+        is a local coordinate system based on the super chunk.
+
+    cellprob_threshold: float
+        Cell probability threshold.
+
+    output_cellprob: zarr.core.Array
+        Zarr dataset where we write the cell probabilities.
+
+    output_combined_gradients: zarr.core.Array
+        Zarr dataset where we write the combined gradients.
+
+    logger: logging.Logger
+        Logging object
+    """
     # Recover global position of internal chunk
     (
         global_coord_pos,
@@ -72,6 +101,9 @@ def execute_worker(
 
 
 def _execute_worker(params):
+    """
+    Worker interface to provide parameters
+    """
     execute_worker(**params)
 
 
