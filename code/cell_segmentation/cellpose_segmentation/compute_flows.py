@@ -4,6 +4,7 @@ This operation needs to happen between overlapping
 3D chunks to avoid having misagreements between chunks.
 """
 
+import logging
 import multiprocessing
 import os
 from time import time
@@ -22,6 +23,7 @@ from cellpose.dynamics import follow_flows
 from cellpose.io import logger_setup
 from cellpose.models import assign_device
 from scipy.ndimage import maximum_filter1d
+from torch import device
 
 from .utils import utils
 
@@ -96,17 +98,52 @@ def computing_overlapping_hist_and_seed_finding(
 
 
 def execute_worker(
-    data,
-    batch_super_chunk,
-    batch_internal_slice,
-    overlap_prediction_chunksize,
-    dataset_shape,
-    sdevice,
-    output_pflow,
-    output_hist,
-    global_seeds_folder,
-    logger,
+    data: ArrayLike,
+    batch_super_chunk: Tuple[slice],
+    batch_internal_slice: Tuple[slice],
+    overlap_prediction_chunksize: Tuple[int],
+    dataset_shape: Tuple[int],
+    sdevice: device,
+    output_pflow: zarr.core.Array,
+    output_hist: zarr.core.Array,
+    global_seeds_folder: PathLike,
+    logger: logging.Logger,
 ):
+    """
+    Function that executes each worker. It takes
+    the combined gradients and follows the flows.
+
+    Parameters
+    ----------
+    data: ArrayLike
+        Data to process.
+
+    batch_super_chunk: Tuple[slice]
+        Slices of the super chunk loaded in shared memory.
+
+    batch_internal_slice: Tuple[slice]
+        Internal slice of the current chunk of data. This
+        is a local coordinate system based on the super chunk.
+
+    overlap_prediction_chunksize: Tuple[int]
+        Overlap area between chunks.
+
+    dataset_shape: Tuple[int]
+        Entire dataset shape.
+
+    output_pflow: zarr.core.Array
+        Zarr dataset where we write the flows.
+
+    output_hist: zarr.core.Array
+        Zarr dataset where we write histograms.
+
+    global_seeds_folder: PathLike
+        Path where the global seeds will be written.
+
+    logger: logging.Logger
+        Logging object
+    """
+
     data = np.squeeze(data, axis=0)  # sample.batch_tensor.numpy()
 
     # Following flows
@@ -155,22 +192,18 @@ def execute_worker(
         logger.info(
             f"Worker [{os.getpid()}] Points found in overlapping chunks: {local_seeds_overlp.shape}"
         )
+
         # Saving seeds
-        # np.save(
-        #     f"{local_seeds_folder}/local_seeds_{unpadded_global_slice[1:]}.npy",
-        #     local_seeds_overlp,
-        # )
         np.save(
             f"{global_seeds_folder}/global_seeds_{unpadded_global_slice[1:]}.npy",
             global_seeds_overlp,
         )
-        # np.save(
-        #     f"{hist_seeds_folder}/local_hist_{unpadded_global_slice[1:]}.npy",
-        #     hist_no_overlp,
-        # )
 
 
 def _execute_worker(params):
+    """
+    Worker interface to provide parameters
+    """
     execute_worker(**params)
 
 

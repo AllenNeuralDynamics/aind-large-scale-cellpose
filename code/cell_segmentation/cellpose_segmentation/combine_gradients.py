@@ -4,6 +4,7 @@ predicted. This is a local operation that happens
 that does not require to run in overlapping chunks.
 """
 
+import logging
 import multiprocessing
 import os
 from time import time
@@ -21,13 +22,13 @@ from .utils import utils
 
 
 def execute_worker(
-    data,
-    batch_super_chunk,
-    batch_internal_slice,
-    cellprob_threshold,
-    output_cellprob,
-    output_combined_gradients,
-    logger,
+    data: ArrayLike,
+    batch_super_chunk: Tuple[slice],
+    batch_internal_slice: Tuple[slice],
+    cellprob_threshold: float,
+    output_cellprob: zarr.core.Array,
+    output_combined_gradients: zarr.core.Array,
+    logger: logging.Logger,
 ):
     """
     Function that executes each worker. It takes

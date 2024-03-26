@@ -6,6 +6,7 @@ the flows were computed using overlapping chunks
 in each direction.
 """
 
+import logging
 import multiprocessing
 import os
 from glob import glob
@@ -443,20 +444,68 @@ def get_output_seg_data_type(n_cells: int) -> Type:
 
 
 def execute_worker(
-    data,
-    batch_super_chunk,
-    batch_internal_slice,
-    overlap_prediction_chunksize,
-    dataset_shape,
-    cell_centroids_path,
-    output_seg_masks,
-    original_dataset_shape,
-    global_seeds,
-    hists,
-    min_cell_volume,
-    flow_threshold,
-    logger,
+    data: ArrayLike,
+    batch_super_chunk: Tuple[slice],
+    batch_internal_slice: Tuple[slice],
+    overlap_prediction_chunksize: Tuple[int],
+    dataset_shape: Tuple[int],
+    cell_centroids_path: PathLike,
+    output_seg_masks: zarr.core.Array,
+    original_dataset_shape: Tuple[int],
+    global_seeds: PathLike,
+    hists: ArrayLike,
+    min_cell_volume: int,
+    flow_threshold: float,
+    logger: logging.Logger,
 ):
+    """
+    Function that executes each worker. It takes
+    the flows, histograms and global seeds (cell centroids)
+    to compute the segmentation masks.
+
+    Parameters
+    ----------
+    data: ArrayLike
+        Data to process.
+
+    batch_super_chunk: Tuple[slice]
+        Slices of the super chunk loaded in shared memory.
+
+    batch_internal_slice: Tuple[slice]
+        Internal slice of the current chunk of data. This
+        is a local coordinate system based on the super chunk.
+
+    overlap_prediction_chunksize: Tuple[int]
+        Overlap area between chunks.
+
+    dataset_shape: Tuple[int]
+        Entire dataset shape.
+
+    cell_centroids_path: PathLike
+        Path where the cell centroids are stored.
+
+    output_seg_masks: zarr.core.Array
+        Zarr where the segmentation mask will be written.
+
+    original_dataset_shape: Tuple[int]
+        Entire dataset shape.
+
+    global_seeds: PathLike
+        Path where the global seeds are stored.
+
+    hists: ArrayLike
+        lazy zarr dataset with histograms.
+
+    min_cell_volume: int
+        Minimum cell volume.
+
+    flow_threshold: float
+        Flow threshold.
+
+    logger: logging.Logger
+        Logging object.
+    """
+
     data = np.squeeze(data, axis=0)
 
     (
@@ -535,6 +584,9 @@ def execute_worker(
 
 
 def _execute_worker(params):
+    """
+    Worker interface to provide parameters
+    """
     execute_worker(**params)
 
 
