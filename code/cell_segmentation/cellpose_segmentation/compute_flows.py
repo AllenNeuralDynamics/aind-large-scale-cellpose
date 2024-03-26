@@ -57,7 +57,7 @@ def computing_overlapping_hist_and_seed_finding(
     rpad: int
         If we want to add padding to the histograms. This
         padding is applied in every axis.
-        Default: 0ß
+        Default: 0
 
     Returns
     -------
@@ -65,7 +65,7 @@ def computing_overlapping_hist_and_seed_finding(
         Centroids of cells in the global coordinate system,
         centroids of cells in the local coordinate system (chunk),
         and the histogram for the chunk of data. This histogram
-        is unpadded based on the provided local coordinate system.ß
+        is unpadded based on the provided local coordinate system.
     """
 
     pflows = []
