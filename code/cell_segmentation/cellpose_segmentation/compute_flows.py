@@ -5,6 +5,7 @@ This operation needs to happen between overlapping
 """
 
 import multiprocessing
+import os
 from time import time
 from typing import Callable, Optional, Tuple
 
@@ -92,6 +93,85 @@ def computing_overlapping_hist_and_seed_finding(
     pix_global = pix + np.array([global_coord.start for global_coord in global_coords])
 
     return pix_global, pix, h
+
+
+def execute_worker(
+    data,
+    batch_super_chunk,
+    batch_internal_slice,
+    overlap_prediction_chunksize,
+    dataset_shape,
+    sdevice,
+    output_pflow,
+    output_hist,
+    global_seeds_folder,
+    logger,
+):
+    data = np.squeeze(data, axis=0)  # sample.batch_tensor.numpy()
+
+    # Following flows
+    pflows, _ = follow_flows(data / 5.0, niter=200, interp=False, device=sdevice)
+    pflows = pflows.astype(np.int32)
+
+    (
+        global_coord_pos,
+        global_coord_positions_start,
+        global_coord_positions_end,
+    ) = recover_global_position(
+        super_chunk_slice=batch_super_chunk,  # sample.batch_super_chunk[0],
+        internal_slices=batch_internal_slice,  # sample.batch_internal_slice,
+    )
+
+    unpadded_global_slice, unpadded_local_slice = unpad_global_coords(
+        global_coord_pos=global_coord_pos,
+        block_shape=data.shape,
+        overlap_prediction_chunksize=overlap_prediction_chunksize,
+        dataset_shape=dataset_shape,  # zarr_dataset.lazy_data.shape,
+    )
+
+    pflows_non_overlaped = pflows[unpadded_local_slice]
+
+    logger.info(
+        f"Worker [{os.getpid()}]: Saving pflows from {global_coord_pos} to {unpadded_global_slice}. Pshape: {pflows_non_overlaped.shape}"
+    )
+
+    logger.info(f"Worker [{os.getpid()}] Computing histogram in overlapping chunks")
+    # Computing overlapping histogram and pixel seed finding
+    global_seeds_overlp, local_seeds_overlp, hist_no_overlp = (
+        computing_overlapping_hist_and_seed_finding(
+            p=pflows,
+            global_coords=unpadded_global_slice[1:],
+            unpadded_local_slice=unpadded_local_slice[
+                1:
+            ],  # To move the hists to local coord system
+            rpad=0,
+        )
+    )
+
+    output_pflow[unpadded_global_slice] = pflows_non_overlaped
+    output_hist[unpadded_global_slice[1:]] = hist_no_overlp
+
+    if local_seeds_overlp.shape[0]:
+        logger.info(
+            f"Worker [{os.getpid()}] Points found in overlapping chunks: {local_seeds_overlp.shape}"
+        )
+        # Saving seeds
+        # np.save(
+        #     f"{local_seeds_folder}/local_seeds_{unpadded_global_slice[1:]}.npy",
+        #     local_seeds_overlp,
+        # )
+        np.save(
+            f"{global_seeds_folder}/global_seeds_{unpadded_global_slice[1:]}.npy",
+            global_seeds_overlp,
+        )
+        # np.save(
+        #     f"{hist_seeds_folder}/local_hist_{unpadded_global_slice[1:]}.npy",
+        #     hist_no_overlp,
+        # )
+
+
+def _execute_worker(params):
+    execute_worker(**params)
 
 
 def generate_flows_and_centroids(
@@ -293,76 +373,69 @@ def generate_flows_and_centroids(
     logger.info(f"{20*'='} Starting combination of gradients {20*'='}")
     start_time = time()
 
+    # Setting exec workers to CO CPUs
+    exec_n_workers = co_cpus
+
+    # Create a pool of processes
+    pool = multiprocessing.Pool(processes=exec_n_workers)
+
+    # Variables for multiprocessing
+    picked_blocks = []
+    curr_picked_blocks = 0
+
+    logger.info(f"Number of workers processing data: {exec_n_workers}")
+
     for i, sample in enumerate(zarr_data_loader):
 
-        data_block = np.squeeze(sample.batch_tensor.numpy(), axis=0)
-
-        # Following flows
-        pflows, _ = follow_flows(
-            data_block / 5.0, niter=200, interp=False, device=sdevice
+        picked_blocks.append(
+            {
+                "data": sample.batch_tensor.numpy(),
+                "batch_super_chunk": sample.batch_super_chunk[0],
+                "batch_internal_slice": sample.batch_internal_slice,
+                "overlap_prediction_chunksize": overlap_prediction_chunksize,
+                "dataset_shape": zarr_dataset.lazy_data.shape,
+                "output_pflow": output_pflow,
+                "output_hist": output_hist,
+                "global_seeds_folder": global_seeds_folder,
+                "sdevice": sdevice,
+                "logger": logger,
+            }
         )
-        pflows = pflows.astype(np.int32)
+        curr_picked_blocks += 1
 
-        (
-            global_coord_pos,
-            global_coord_positions_start,
-            global_coord_positions_end,
-        ) = recover_global_position(
-            super_chunk_slice=sample.batch_super_chunk[0],
-            internal_slices=sample.batch_internal_slice,
-        )
+        if curr_picked_blocks == exec_n_workers:
+            # Assigning blocks to execution workers
+            jobs = [
+                pool.apply_async(_execute_worker, args=(picked_block,))
+                for picked_block in picked_blocks
+            ]
 
-        unpadded_global_slice, unpadded_local_slice = unpad_global_coords(
-            global_coord_pos=global_coord_pos,
-            block_shape=data_block.shape,
-            overlap_prediction_chunksize=overlap_prediction_chunksize,
-            dataset_shape=zarr_dataset.lazy_data.shape,
-        )
+            logger.info(f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs")
 
-        pflows_non_overlaped = pflows[unpadded_local_slice]
+            # Wait for all processes to finish
+            results = [job.get() for job in jobs]
 
-        logger.info(
-            f"Batch {i}: {sample.batch_tensor.shape} Super chunk: {sample.batch_super_chunk} - intern slice: {sample.batch_internal_slice} - global pos: {global_coord_pos}"
-        )
-        logger.info(
-            f"Batch {i}: Saving pflows from {global_coord_pos} to {unpadded_global_slice}. Pshape: {pflows_non_overlaped.shape}"
-        )
+            # Setting variables back to init
+            curr_picked_blocks = 0
+            picked_blocks = []
 
-        logger.info("Computing histogram in overlapping chunks")
-        # Computing overlapping histogram and pixel seed finding
-        global_seeds_overlp, local_seeds_overlp, hist_no_overlp = (
-            computing_overlapping_hist_and_seed_finding(
-                p=pflows,
-                global_coords=unpadded_global_slice[1:],
-                unpadded_local_slice=unpadded_local_slice[
-                    1:
-                ],  # To move the hists to local coord system
-                rpad=0,
-            )
-        )
+    if curr_picked_blocks != 0:
+        logger.info(f"Blocks not processed inside of loop: {curr_picked_blocks}")
+        # Assigning blocks to execution workers
+        jobs = [
+            pool.apply_async(_execute_worker, args=(picked_block,))
+            for picked_block in picked_blocks
+        ]
 
-        output_pflow[unpadded_global_slice] = pflows_non_overlaped
-        output_hist[unpadded_global_slice[1:]] = hist_no_overlp
+        # Wait for all processes to finish
+        results = [job.get() for job in jobs]
 
-        if local_seeds_overlp.shape[0]:
-            logger.info(
-                f"Points found in overlapping chunks: {local_seeds_overlp.shape}"
-            )
-            # Saving seeds
-            # np.save(
-            #     f"{local_seeds_folder}/local_seeds_{unpadded_global_slice[1:]}.npy",
-            #     local_seeds_overlp,
-            # )
-            np.save(
-                f"{global_seeds_folder}/global_seeds_{unpadded_global_slice[1:]}.npy",
-                global_seeds_overlp,
-            )
-            # np.save(
-            #     f"{hist_seeds_folder}/local_hist_{unpadded_global_slice[1:]}.npy",
-            #     hist_no_overlp,
-            # )
-            global_seeds_overlp = None
-            local_seeds_overlp = None
+        # Setting variables back to init
+        curr_picked_blocks = 0
+        picked_blocks = []
+
+    # Closing pool of workers
+    pool.close()
 
     end_time = time()
 

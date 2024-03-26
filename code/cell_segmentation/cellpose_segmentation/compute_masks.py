@@ -442,6 +442,102 @@ def get_output_seg_data_type(n_cells: int) -> Type:
     return selected_dtype
 
 
+def execute_worker(
+    data,
+    batch_super_chunk,
+    batch_internal_slice,
+    overlap_prediction_chunksize,
+    dataset_shape,
+    cell_centroids_path,
+    output_seg_masks,
+    original_dataset_shape,
+    global_seeds,
+    hists,
+    min_cell_volume,
+    flow_threshold,
+    logger,
+):
+    data = np.squeeze(data, axis=0)
+
+    (
+        global_coord_pos,
+        global_coord_positions_start,
+        global_coord_positions_end,
+    ) = recover_global_position(
+        super_chunk_slice=batch_super_chunk,  # sample.batch_super_chunk[0],
+        internal_slices=batch_internal_slice,  # sample.batch_internal_slice,
+    )
+
+    unpadded_global_slice, unpadded_local_slice = unpad_global_coords(
+        global_coord_pos=global_coord_pos,
+        block_shape=data.shape,
+        overlap_prediction_chunksize=overlap_prediction_chunksize,
+        dataset_shape=dataset_shape,  # zarr_dataset.lazy_data.shape,
+    )
+
+    logger.info(
+        f"Global slices: {global_coord_pos} - Unpadded global slices: {unpadded_global_slice[1:]} - Local slices: {unpadded_local_slice[1:]}"
+    )
+
+    global_points_path = (
+        f"{cell_centroids_path}/global_seeds_{unpadded_global_slice[1:]}.npy"
+    )
+
+    # Unpadded block mask zeros if seeds don't exist in that area
+    chunked_seg_mask = np.zeros(data.shape[1:], dtype=np.uint32)
+
+    if os.path.exists(global_points_path):
+
+        picked_gl_to_lc = extract_global_to_local(
+            global_seeds.copy(),
+            global_coord_pos[1:],
+            0,
+        )
+        chunked_hist = hists[global_coord_pos[1:]]
+        logger.info(
+            f"Worker [{os.getpid()}] Computing seg masks in overlapping chunks: {picked_gl_to_lc.shape[0]} - data block shape: {data.shape} - hist shape: {chunked_hist.shape}"
+        )
+
+        chunked_seg_mask = compute_chunked_mask(
+            pflows=data.astype(np.int32),
+            dP_masked=None,
+            cell_centroids=picked_gl_to_lc[..., :3],
+            hist=chunked_hist,
+            cell_ids=picked_gl_to_lc[..., -1:],
+            min_cell_volume=min_cell_volume,
+            flow_threshold=flow_threshold,
+            rpad=0,
+            curr_device=None,
+            iter_points=False,
+        )
+
+    # Adding new axis for the output segmentation
+    unpad_chunked_seg_mask = chunked_seg_mask[unpadded_local_slice[1:]]
+    unpad_chunked_seg_mask = utils.pad_array_n_d(
+        arr=unpad_chunked_seg_mask, dim=len(original_dataset_shape)
+    )
+
+    output_slices = (
+        slice(0, 1),
+        slice(0, 1),
+    ) + unpadded_global_slice[1:]
+    output_chunk_shape = output_seg_masks[output_slices].shape
+
+    unpad_chunked_seg_mask = unpad_chunked_seg_mask[
+        :,
+        :,
+        : output_chunk_shape[-3],
+        : output_chunk_shape[-2],
+        : output_chunk_shape[-1],
+    ]
+
+    output_seg_masks[output_slices] = unpad_chunked_seg_mask
+
+
+def _execute_worker(params):
+    execute_worker(**params)
+
+
 def generate_masks(
     dataset_path: PathLike,
     multiscale: str,
@@ -661,87 +757,73 @@ def generate_masks(
     logger.info(f"{20*'='} Starting mask generation {20*'='}")
     start_time = time()
 
+    # Setting exec workers to CO CPUs
+    exec_n_workers = co_cpus
+
+    # Create a pool of processes
+    pool = multiprocessing.Pool(processes=exec_n_workers)
+
+    # Variables for multiprocessing
+    picked_blocks = []
+    curr_picked_blocks = 0
+
+    logger.info(f"Number of workers processing data: {exec_n_workers}")
+
     for i, sample in enumerate(zarr_data_loader):
 
-        data_block = np.squeeze(sample.batch_tensor.numpy(), axis=0)
-
-        (
-            global_coord_pos,
-            global_coord_positions_start,
-            global_coord_positions_end,
-        ) = recover_global_position(
-            super_chunk_slice=sample.batch_super_chunk[0],
-            internal_slices=sample.batch_internal_slice,
+        picked_blocks.append(
+            {
+                "data": sample.batch_tensor.numpy(),
+                "batch_super_chunk": sample.batch_super_chunk[0],
+                "batch_internal_slice": sample.batch_internal_slice,
+                "overlap_prediction_chunksize": overlap_prediction_chunksize,
+                "dataset_shape": zarr_dataset.lazy_data.shape,
+                "cell_centroids_path": cell_centroids_path,
+                "output_seg_masks": output_seg_masks,
+                "original_dataset_shape": original_dataset_shape,
+                "global_seeds": global_seeds,
+                "min_cell_volume": min_cell_volume,
+                "flow_threshold": flow_threshold,
+                "hists": hists,
+                "logger": logger,
+            }
         )
 
-        unpadded_global_slice, unpadded_local_slice = unpad_global_coords(
-            global_coord_pos=global_coord_pos,
-            block_shape=data_block.shape,
-            overlap_prediction_chunksize=overlap_prediction_chunksize,
-            dataset_shape=zarr_dataset.lazy_data.shape,
-        )
+        curr_picked_blocks += 1
 
-        logger.info(
-            f"Global slices: {global_coord_pos} - Unpadded global slices: {unpadded_global_slice[1:]} - Local slices: {unpadded_local_slice[1:]}"
-        )
+        if curr_picked_blocks == exec_n_workers:
+            # Assigning blocks to execution workers
+            jobs = [
+                pool.apply_async(_execute_worker, args=(picked_block,))
+                for picked_block in picked_blocks
+            ]
 
-        global_points_path = (
-            f"{cell_centroids_path}/global_seeds_{unpadded_global_slice[1:]}.npy"
-        )
+            logger.info(f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs")
 
-        logger.info(
-            f"Batch {i}: {sample.batch_tensor.shape} Super chunk: {sample.batch_super_chunk} - intern slice: {sample.batch_internal_slice} - global pos: {global_coord_pos}"
-        )
+            # Wait for all processes to finish
+            results = [job.get() for job in jobs]
 
-        # Unpadded block mask zeros if seeds don't exist in that area
-        chunked_seg_mask = np.zeros(data_block.shape[1:], dtype=np.uint32)
+            # Setting variables back to init
+            curr_picked_blocks = 0
+            picked_blocks = []
 
-        if os.path.exists(global_points_path):
-
-            picked_gl_to_lc = extract_global_to_local(
-                global_seeds.copy(),
-                global_coord_pos[1:],
-                0,
-            )
-            chunked_hist = hists[global_coord_pos[1:]]
-            logger.info(
-                f"Computing seg masks in overlapping chunks: {picked_gl_to_lc.shape[0]} - data block shape: {data_block.shape} - hist shape: {chunked_hist.shape}"
-            )
-
-            chunked_seg_mask = compute_chunked_mask(
-                pflows=data_block.astype(np.int32),
-                dP_masked=None,
-                cell_centroids=picked_gl_to_lc[..., :3],
-                hist=chunked_hist,
-                cell_ids=picked_gl_to_lc[..., -1:],
-                min_cell_volume=min_cell_volume,
-                flow_threshold=flow_threshold,
-                rpad=0,
-                curr_device=None,
-                iter_points=False,
-            )
-
-        # Adding new axis for the output segmentation
-        unpad_chunked_seg_mask = chunked_seg_mask[unpadded_local_slice[1:]]
-        unpad_chunked_seg_mask = utils.pad_array_n_d(
-            arr=unpad_chunked_seg_mask, dim=len(original_dataset_shape)
-        )
-
-        output_slices = (
-            slice(0, 1),
-            slice(0, 1),
-        ) + unpadded_global_slice[1:]
-        output_chunk_shape = output_seg_masks[output_slices].shape
-
-        unpad_chunked_seg_mask = unpad_chunked_seg_mask[
-            :,
-            :,
-            : output_chunk_shape[-3],
-            : output_chunk_shape[-2],
-            : output_chunk_shape[-1],
+    if curr_picked_blocks != 0:
+        logger.info(f"Blocks not processed inside of loop: {curr_picked_blocks}")
+        # Assigning blocks to execution workers
+        jobs = [
+            pool.apply_async(_execute_worker, args=(picked_block,))
+            for picked_block in picked_blocks
         ]
 
-        output_seg_masks[output_slices] = unpad_chunked_seg_mask
+        # Wait for all processes to finish
+        results = [job.get() for job in jobs]
+
+        # Setting variables back to init
+        curr_picked_blocks = 0
+        picked_blocks = []
+
+    # Closing pool of workers
+    pool.close()
 
     end_time = time()
 

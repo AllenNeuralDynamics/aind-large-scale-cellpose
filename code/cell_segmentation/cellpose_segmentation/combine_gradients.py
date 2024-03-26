@@ -5,6 +5,7 @@ that does not require to run in overlapping chunks.
 """
 
 import multiprocessing
+import os
 from time import time
 from typing import Callable, Optional, Tuple
 
@@ -17,6 +18,61 @@ from aind_large_scale_prediction.generator.utils import recover_global_position
 from aind_large_scale_prediction.io import ImageReaderFactory
 
 from .utils import utils
+
+
+def execute_worker(
+    data,
+    batch_super_chunk,
+    batch_internal_slice,
+    cellprob_threshold,
+    output_cellprob,
+    output_combined_gradients,
+    logger,
+):
+    # Recover global position of internal chunk
+    (
+        global_coord_pos,
+        global_coord_positions_start,
+        global_coord_positions_end,
+    ) = recover_global_position(
+        super_chunk_slice=batch_super_chunk,  # sample.batch_super_chunk[0],
+        internal_slices=batch_internal_slice,  # sample.batch_internal_slice,
+    )
+
+    data = np.squeeze(data, axis=0)  # sample.batch_tensor.numpy()
+
+    dP = np.stack(
+        (
+            data[1][0] + data[2][0],  # dZ
+            data[0][0] + data[2][1],  # dY
+            data[0][1] + data[1][1],  # dX
+        ),
+        axis=0,
+    )
+
+    # Cell probability above threshold
+    cell_probability = (
+        data[0][-1] + data[1][-1] + data[2][-1] > cellprob_threshold
+    ).astype(np.uint8)
+
+    # Looking at flows within cell areas
+    dP_masked = dP * cell_probability
+
+    # Saving cell probability as binary mask
+    cellprob_coord_pos = global_coord_pos[-3:]
+    output_cellprob[cellprob_coord_pos] = cell_probability
+
+    # Saving dP
+    combined_gradients_coord_pos = (slice(0, 3),) + global_coord_pos[-3:]
+    output_combined_gradients[combined_gradients_coord_pos] = dP_masked
+
+    logger.info(
+        f"Worker [{os.getpid()}] - Cell probability coords: {cellprob_coord_pos} - dP masked coords: {combined_gradients_coord_pos}"
+    )
+
+
+def _execute_worker(params):
+    execute_worker(**params)
 
 
 def combine_gradients(
@@ -199,53 +255,70 @@ def combine_gradients(
 
     cellprob_threshold = 0.0
 
+    # Setting exec workers to CO CPUs
+    exec_n_workers = co_cpus
+
+    # Create a pool of processes
+    pool = multiprocessing.Pool(processes=exec_n_workers)
+
+    # Variables for multiprocessing
+    picked_blocks = []
+    curr_picked_blocks = 0
+
+    logger.info(f"Number of workers processing data: {exec_n_workers}")
+
     for i, sample in enumerate(zarr_data_loader):
         logger.info(
             f"Batch {i}: {sample.batch_tensor.shape} - Pinned?: {sample.batch_tensor.is_pinned()} - dtype: {sample.batch_tensor.dtype} - device: {sample.batch_tensor.device}"
         )
 
-        # Recover global position of internal chunk
-        (
-            global_coord_pos,
-            global_coord_positions_start,
-            global_coord_positions_end,
-        ) = recover_global_position(
-            super_chunk_slice=sample.batch_super_chunk[0],
-            internal_slices=sample.batch_internal_slice,
+        picked_blocks.append(
+            {
+                "data": sample.batch_tensor.numpy(),
+                "batch_super_chunk": sample.batch_super_chunk[0],
+                "batch_internal_slice": sample.batch_internal_slice,
+                "cellprob_threshold": cellprob_threshold,
+                "output_cellprob": output_cellprob,
+                "output_combined_gradients": output_combined_gradients,
+                "logger": logger,
+            }
         )
+        curr_picked_blocks += 1
 
-        data = np.squeeze(sample.batch_tensor.numpy(), axis=0)
+        if curr_picked_blocks == exec_n_workers:
 
-        dP = np.stack(
-            (
-                data[1][0] + data[2][0],  # dZ
-                data[0][0] + data[2][1],  # dY
-                data[0][1] + data[1][1],  # dX
-            ),
-            axis=0,
-        )
+            # Assigning blocks to execution workers
+            jobs = [
+                pool.apply_async(_execute_worker, args=(picked_block,))
+                for picked_block in picked_blocks
+            ]
 
-        # Cell probability above threshold
-        cell_probability = (
-            data[0][-1] + data[1][-1] + data[2][-1] > cellprob_threshold
-        ).astype(np.uint8)
+            logger.info(f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs")
 
-        # Looking at flows within cell areas
-        dP_masked = dP * cell_probability
+            # Wait for all processes to finish
+            results = [job.get() for job in jobs]
 
-        # Saving cell probability as binary mask
-        cellprob_coord_pos = global_coord_pos[-3:]
-        # print("Save cell prob coords: ", cellprob_coord_pos)
-        output_cellprob[cellprob_coord_pos] = cell_probability
+            # Setting variables back to init
+            curr_picked_blocks = 0
+            picked_blocks = []
 
-        # Saving dP
-        combined_gradients_coord_pos = (slice(0, 3),) + global_coord_pos[-3:]
-        # print("Save combined gradients coords: ", combined_gradients_coord_pos)
-        output_combined_gradients[combined_gradients_coord_pos] = dP_masked
+    if curr_picked_blocks != 0:
+        logger.info(f"Blocks not processed inside of loop: {curr_picked_blocks}")
+        # Assigning blocks to execution workers
+        jobs = [
+            pool.apply_async(_execute_worker, args=(picked_block,))
+            for picked_block in picked_blocks
+        ]
 
-        logger.info(
-            f"Cell probability coords: {cellprob_coord_pos} - dP masked coords: {combined_gradients_coord_pos}"
-        )
+        # Wait for all processes to finish
+        results = [job.get() for job in jobs]
+
+        # Setting variables back to init
+        curr_picked_blocks = 0
+        picked_blocks = []
+
+    # Closing pool of workers
+    pool.close()
 
     end_time = time()
 
