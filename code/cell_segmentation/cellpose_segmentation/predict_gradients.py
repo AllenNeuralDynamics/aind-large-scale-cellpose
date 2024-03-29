@@ -14,6 +14,7 @@ import zarr
 from aind_large_scale_prediction.generator.dataset import create_data_loader
 from aind_large_scale_prediction.generator.utils import (
     concatenate_lazy_data, recover_global_position)
+from aind_large_scale_prediction.io import ImageReaderFactory
 from cellpose.core import run_net, use_gpu
 from cellpose.io import logger_setup
 from cellpose.models import CellposeModel, assign_device, transforms
@@ -277,6 +278,7 @@ def large_scale_cellpose_gradients_per_axis(
     n_workers: int,
     batch_size: int,
     results_folder: PathLike,
+    image_metadata: Dict,
     super_chunksize: Optional[Tuple[int, ...]] = None,
     lazy_callback_fn: Optional[Callable[[ArrayLike], ArrayLike]] = None,
     global_normalization: Optional[bool] = True,
@@ -411,6 +413,22 @@ def large_scale_cellpose_gradients_per_axis(
     # Overlap between prediction chunks, this overlap happens in every axis
     overlap_prediction_chunksize = tuple([0] * len(prediction_chunksize))
 
+    logger.info(f"Filtered Image metadata: {image_metadata}")
+
+    # Defining anistropy
+    anisotropy = 1.0
+
+    # Order ZYX
+    if axis:
+        # Y and X have the same resolution for Z1 data
+        anisotropy = (
+            image_metadata["axes"]["z"]["scale"] / image_metadata["axes"]["y"]["scale"]
+        )
+
+    logger.info(
+        f"Image metadata: {image_metadata} - anisotropy: {anisotropy} - axis: {axis}"
+    )
+
     # Creating zarr data loader
     zarr_data_loader, zarr_dataset = create_data_loader(
         lazy_data=lazy_data,
@@ -520,7 +538,7 @@ def large_scale_cellpose_gradients_per_axis(
             channels=cell_channels,
             normalize=local_normalization,
             diameter=15,
-            anisotropy=1.0,
+            anisotropy=anisotropy,
             channel_percentiles=chn_percentiles,
         )
 
@@ -673,7 +691,7 @@ def predict_gradients(
     elif len_datasets:
         lazy_data = concatenate_lazy_data(
             dataset_paths=dataset_paths,
-            multiscale=multiscale,
+            multiscales=[multiscale, multiscale],
             concat_axis=-4,  # Concatenation axis
         )
         print("Combined background and nuclear channel: ", lazy_data, lazy_data.dtype)
@@ -698,6 +716,17 @@ def predict_gradients(
     # Reading image shape
     image_shape = lazy_data.shape
     factor = 6
+
+    # Getting image metadata
+    image_metadata = (
+        ImageReaderFactory()
+        .create(data_path=dataset_paths[0], parse_path=False, multiscale=multiscale)
+        .metadata()
+    )
+
+    image_metadata = utils.parse_zarr_metadata(
+        metadata=image_metadata, multiscale=multiscale
+    )
 
     # axes_names = ["XY", "ZX", "ZY"]
 
@@ -745,6 +774,7 @@ def predict_gradients(
             axis=axis,
             prediction_chunksize=prediction_chunksize,
             target_size_mb=target_size_mb,
+            image_metadata=image_metadata,
             n_workers=n_workers,
             batch_size=batch_size,
             super_chunksize=super_chunksize,

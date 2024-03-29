@@ -6,7 +6,7 @@ ARG GIT_ASKPASS
 ARG GIT_ACCESS_TOKEN
 COPY git-askpass /
 
-ARG new_pred_version="0.0.7"
+ARG new_pred_version="0.0.9"
 
 RUN pip install -U --no-cache-dir \
     git+https://github.com/AllenNeuralDynamics/aind-large-scale-prediction.git \

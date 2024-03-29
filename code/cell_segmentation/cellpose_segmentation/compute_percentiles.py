@@ -291,7 +291,7 @@ def main():
 
     lazy_data = concatenate_lazy_data(
         dataset_paths=[dataset_path, nuclear_channel],
-        multiscale=multiscale,
+        multiscales=[multiscale, multiscale],
         concat_axis=-4,
     )
 

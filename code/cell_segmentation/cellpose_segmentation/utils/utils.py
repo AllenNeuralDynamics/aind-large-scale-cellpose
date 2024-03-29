@@ -8,7 +8,7 @@ import os
 import platform
 import time
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -368,3 +368,50 @@ def pad_array_n_d(arr: ArrayLike, dim: int = 5) -> ArrayLike:
     while arr.ndim < dim:
         arr = arr[np.newaxis, ...]
     return arr
+
+
+def parse_zarr_metadata(metadata: Dict, multiscale: Optional[str] = None) -> Dict:
+    """
+    Parses the zarr metadata and retrieves
+    the metadata we need in the correct format.
+
+    Parameters
+    ----------
+    metadata: Dict
+        Metadata dictionary that contains ".zattrs" and
+        ".zarray"
+
+    multiscale: Optional[str]
+        Multiscale we're retieving the metadata for.
+        Default: None
+
+    Returns
+    -------
+    Dict
+        Dictionary with the metadata we need
+    """
+    parsed_metadata = {"axes": {}}
+    zattrs = metadata.get(".zattrs")
+    # zarray = metadata.get('.zarray')
+
+    if zattrs is not None:
+        multiscales = zattrs.get("multiscales")[0]
+        axes = multiscales.get("axes")
+        datasets = multiscales.get("datasets")
+
+        dataset_res = None
+
+        for d in datasets:
+            if d["path"] == multiscale:
+                dataset_res = d["coordinateTransformations"][0]["scale"]
+                break
+
+        for idx in range(len(axes)):
+            ax = axes[idx]
+            parsed_metadata["axes"][ax["name"]] = {
+                "unit": ax.get("unit"),
+                "type": ax.get("type"),
+                "scale": dataset_res[idx],
+            }
+
+    return parsed_metadata
