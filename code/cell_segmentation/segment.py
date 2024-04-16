@@ -3,7 +3,7 @@ Main file to run segmentation
 """
 
 import os
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from .cellpose_segmentation._shared.types import PathLike
 from .cellpose_segmentation.combine_gradients import combine_gradients
@@ -18,6 +18,7 @@ def segment(
     results_folder: PathLike,
     data_folder: PathLike,
     scratch_folder: PathLike,
+    cellpose_params: Dict,
     global_normalization: Optional[bool] = True,
 ):
     """
@@ -44,6 +45,9 @@ def segment(
     scratch_folder: PathLike
         Path of the scratch folder in Code Ocean.
 
+    cellpose_params: Dict
+        Cellpose parameters
+
     global_normalization: Optional[bool]
         True if we want to compute the normalization
         based on the whole dataset. Default: True
@@ -62,12 +66,12 @@ def segment(
         n_workers = 0  # 16
         batch_size = 1
 
-        # Cellpose params
-        model_name = "cyto"
-        cell_diameter = 15
-        min_cell_volume = 95
-        percentile_range = (10, 99)
-        flow_threshold = 0.0
+        # Cellpose parameters
+        model_name = cellpose_params["model_name"]
+        cell_diameter = cellpose_params["cell_diameter"]
+        min_cell_volume = cellpose_params["min_cell_volume"]
+        percentile_range = cellpose_params["percentile_range"]
+        flow_threshold = cellpose_params["flow_threshold"]
 
         # output gradients
         output_gradients_path = f"{results_folder}/gradients.zarr"
@@ -80,7 +84,7 @@ def segment(
         )
 
         # Large-scale prediction of gradients
-        slices_per_axis = [5, 10, 10]
+        slices_per_axis = [48, 48, 48]
         dataset_shape = predict_gradients(
             dataset_paths=dataset_paths,
             multiscale=multiscale,
