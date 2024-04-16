@@ -2,6 +2,7 @@
 
 import os
 
+from cell_segmentation.cellpose_segmentation.utils import utils
 from cell_segmentation.segment import segment
 
 
@@ -24,7 +25,7 @@ def run():
     # Cellpose params
     cellpose_params = {
         "model_name": "cyto",
-        "cell_diameter": 15,
+        "cell_diameter": 30,
         "min_cell_volume": 95,
         "percentile_range": (10, 99),
         "flow_threshold": 0.0,

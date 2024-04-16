@@ -6,6 +6,7 @@ import logging
 import multiprocessing
 import os
 import platform
+import subprocess
 import time
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -48,11 +49,44 @@ def create_folder(dest_dir: PathLike, verbose: Optional[bool] = False) -> None:
                 raise
 
 
+def get_gpu_metrics():
+    """
+    Retrieves the GPU metrics in current time.
+
+    Returns
+    -------
+    Dict
+        Dictionary that contains the gpu index,
+        utilization and memory at current time.
+    """
+    result = subprocess.run(
+        [
+            "nvidia-smi",
+            "--query-gpu=index,utilization.gpu,memory.used",
+            "--format=csv,noheader,nounits",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    output = result.stdout.strip().split("\n")
+    gpu_metrics = {}
+    for line in output:
+        gpu_index, gpu_util, mem_util = map(float, line.split(","))
+
+        gpu_metrics[int(gpu_index)] = {
+            "gpu_utilization": float(gpu_util),
+            "memory_utilization": float(mem_util),
+        }
+
+    return gpu_metrics
+
+
 def profile_resources(
     time_points: List,
     cpu_percentages: List,
     memory_usages: List,
     monitoring_interval: int,
+    gpu_resources: Optional[Dict] = None,
 ):
     """
     Profiles compute resources usage.
@@ -71,6 +105,9 @@ def profile_resources(
         List to save the memory usage
         percentages during the execution
 
+    gpu_resources: Dict
+        Dict to save the gpu resources
+
     monitoring_interval: int
         Monitoring interval in seconds
     """
@@ -88,6 +125,19 @@ def profile_resources(
         memory_info = psutil.virtual_memory()
         memory_usages.append(memory_info.percent)
 
+        # GPU resources
+        if gpu_resources is not None:
+            gpu_metrics = get_gpu_metrics()
+            curr_idxs = list(gpu_metrics.keys())
+
+            for curr_idx, vals in gpu_metrics.items():
+                gpu_resources[curr_idx]["gpu_utilization"].append(
+                    vals["gpu_utilization"]
+                )
+                gpu_resources[curr_idx]["memory_utilization"].append(
+                    vals["memory_utilization"]
+                )
+
         time.sleep(monitoring_interval)
 
 
@@ -97,6 +147,7 @@ def generate_resources_graphs(
     memory_usages: List,
     output_path: str,
     prefix: str,
+    gpu_resources: Optional[List] = [],
 ):
     """
     Profiles compute resources usage.
@@ -124,6 +175,7 @@ def generate_resources_graphs(
     time_len = len(time_points)
     memory_len = len(memory_usages)
     cpu_len = len(cpu_percentages)
+    gpu_len = len(gpu_resources.keys())
 
     min_len = min([time_len, memory_len, cpu_len])
     if not min_len:
@@ -149,6 +201,43 @@ def generate_resources_graphs(
 
     plt.tight_layout()
     plt.savefig(f"{output_path}/{prefix}_compute_resources.png", bbox_inches="tight")
+
+    if gpu_len:
+        gpu_indexes = list(gpu_resources.keys())
+        gpu_indexes_len = len(gpu_indexes)
+
+        plt.figure(figsize=(15, 15))
+
+        for idx, gpu_idx in enumerate(gpu_indexes):
+            plt.subplot(2, 1, 1)
+            plt.plot(
+                time_points[:min_len],
+                gpu_resources[gpu_idx]["gpu_utilization"][:min_len],
+                label="GPU Usage",
+            )
+            plt.xlabel("Time (s)")
+            plt.ylabel("GPU Usage (%)")
+            plt.title(f"GPU {gpu_idx} - Usage Over Time")
+            plt.grid(True)
+            plt.legend()
+
+            plt.subplot(2, 1, 2)
+            plt.plot(
+                time_points[:min_len],
+                gpu_resources[gpu_idx]["memory_utilization"][:min_len],
+                label="Memory Usage",
+            )
+            plt.xlabel("Time (s)")
+            plt.ylabel("GPU Memory Usage (%)")
+            plt.title(f"GPU {gpu_idx} - Memory Usage Over Time")
+            plt.grid(True)
+            plt.legend()
+
+            plt.tight_layout()
+            plt.savefig(
+                f"{output_path}/{prefix}_GPU_{gpu_idx}_compute_resources.png",
+                bbox_inches="tight",
+            )
 
 
 def stop_child_process(process: multiprocessing.Process):

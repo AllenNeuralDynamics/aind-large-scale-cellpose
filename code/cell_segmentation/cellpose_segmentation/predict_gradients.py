@@ -79,7 +79,7 @@ def run_net(
 
     # run network
     if tile or augment or imgs.ndim == 4:
-        print("Running tiled: ", slc, imgs.shape)
+        # print("Running tiled: ", slc, imgs.shape)
         y, style = _run_tiled(
             net,
             imgs,
@@ -130,9 +130,9 @@ def _run_tiled(net, imgi, batch_size=8, augment=False, bsize=224, tile_overlap=0
         )
         ny, nx, nchan, ly, lx = IMG.shape
         batch_size *= max(4, (bsize**2 // (ly * lx)) ** 0.5)
-        print("Run first tiled batch size: ", batch_size)
-        print(f"Ny {ny} Nx {nx} nchan: {nchan} ly: {ly} lx {lx}: ", batch_size)
-        print("Image shape: ", IMG.shape)
+        # print("Run first tiled batch size: ", batch_size)
+        # print(f"Ny {ny} Nx {nx} nchan: {nchan} ly: {ly} lx {lx}: ", batch_size)
+        # print("Image shape: ", IMG.shape)
 
         yf = np.zeros((Lz, nout, imgi.shape[-2], imgi.shape[-1]), np.float32)
         styles = []
@@ -568,25 +568,6 @@ def large_scale_cellpose_gradients_per_axis(
 
     logger.info(f"Processing dataset of shape {lazy_data.shape}")
 
-    # Tracking compute resources
-    # Subprocess to track used resources
-    manager = multiprocessing.Manager()
-    time_points = manager.list()
-    cpu_percentages = manager.list()
-    memory_usages = manager.list()
-
-    profile_process = multiprocessing.Process(
-        target=utils.profile_resources,
-        args=(
-            time_points,
-            cpu_percentages,
-            memory_usages,
-            20,
-        ),
-    )
-    profile_process.daemon = True
-    profile_process.start()
-
     # Creating zarr data loader
     logger.info(
         f"Creating chunked data loader for {lazy_data} - chunks {lazy_data.chunksize}"
@@ -761,28 +742,16 @@ def large_scale_cellpose_gradients_per_axis(
         ]
         output_gradients[global_coord_pos] = output_prediction
 
+        logger.info(
+            f"Processing Batch {i}: {sample.batch_tensor.shape} - Pinned?: {sample.batch_tensor.is_pinned()} - dtype: {sample.batch_tensor.dtype} - device: {sample.batch_tensor.device} - global_coords: {global_coord_pos} - Pred shape: {y.shape}"
+        )
+
         # Cleaning up memory
         # torch.cuda.empty_cache()
-
-        logger.info(
-            f"Batch {i}: {sample.batch_tensor.shape} - Pinned?: {sample.batch_tensor.is_pinned()} - dtype: {sample.batch_tensor.dtype} - device: {sample.batch_tensor.device} - global_coords: {global_coord_pos} - Pred shape: {y.shape}"
-        )
 
     end_time = time()
 
     logger.info(f"Processing time: {end_time - start_time} seconds")
-
-    # Getting tracked resources and plotting image
-    utils.stop_child_process(profile_process)
-
-    if len(time_points):
-        utils.generate_resources_graphs(
-            time_points,
-            cpu_percentages,
-            memory_usages,
-            results_folder,
-            "cellpose_predict_gradients",
-        )
 
 
 def predict_gradients(
@@ -878,6 +847,37 @@ def predict_gradients(
     Tuple[int]
         Tuple with the shape of the original dataset
     """
+    # Tracking compute resources
+    # Subprocess to track used resources
+    manager = multiprocessing.Manager()
+    time_points = manager.list()
+    cpu_percentages = manager.list()
+    memory_usages = manager.list()
+    gpu_resources = manager.dict()
+
+    gpu_metrics = utils.get_gpu_metrics()
+    curr_idxs = list(gpu_metrics.keys())
+
+    for gpu_indx in curr_idxs:
+        gpu_resources[gpu_indx] = {
+            "gpu_utilization": manager.list(),
+            "memory_utilization": manager.list(),
+        }
+
+    profile_process = multiprocessing.Process(
+        target=utils.profile_resources,
+        args=(
+            time_points,
+            cpu_percentages,
+            memory_usages,
+            60,
+            gpu_resources,
+        ),
+    )
+    profile_process.daemon = True
+    profile_process.start()
+
+    # Estimating gradients per axis
     len_datasets = len(dataset_paths)
     lazy_data = None
 
@@ -979,6 +979,19 @@ def predict_gradients(
             results_folder=results_folder,
             cell_channels=cell_channels,
             chn_percentiles=combined_percentiles,
+        )
+
+    # Getting tracked resources and plotting image
+    utils.stop_child_process(profile_process)
+
+    if len(time_points):
+        utils.generate_resources_graphs(
+            time_points,
+            cpu_percentages,
+            memory_usages,
+            results_folder,
+            gpu_resources=gpu_resources,
+            prefix="cellpose_predict_gradients",
         )
 
     return image_shape[-3:]
