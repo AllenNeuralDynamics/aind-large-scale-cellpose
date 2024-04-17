@@ -21,7 +21,7 @@ from cellpose.core import use_gpu  # , run_net
 from cellpose.core import _forward
 from cellpose.io import logger_setup
 from cellpose.models import CellposeModel, assign_device, transforms
-from tqdm import tqdm, trange
+from tqdm import trange
 
 from ._shared.types import ArrayLike, PathLike
 from .compute_percentiles import compute_percentiles
@@ -36,23 +36,52 @@ def run_net(
 ):
     """
     Run network on image or stack of images.
-
     (faster if augment is False)
 
-    Args:
-        imgs (np.ndarray): The input image or stack of images of size [Ly x Lx x nchan] or [Lz x Ly x Lx x nchan].
-        batch_size (int, optional): Number of tiles to run in a batch. Defaults to 8.
-        rsz (float, optional): Resize coefficient(s) for image. Defaults to 1.0.
-        augment (bool, optional): Tiles image with overlapping tiles and flips overlapped regions to augment. Defaults to False.
-        tile (bool, optional): Tiles image to ensure GPU/CPU memory usage limited (recommended); cannot be turned off for 3D segmentation. Defaults to True.
-        tile_overlap (float, optional): Fraction of overlap of tiles when computing flows. Defaults to 0.1.
-        bsize (int, optional): Size of tiles to use in pixels [bsize x bsize]. Defaults to 224.
+    Parameters
+    ----------
+    imgs: np.ndarray
+        The input image or stack of images of
+        size [Ly x Lx x nchan] or [Lz x Ly x Lx x nchan].
 
-    Returns:
-        y (np.ndarray): output of network, if tiled it is averaged in tile overlaps. Size of [Ly x Lx x 3] or [Lz x Ly x Lx x 3].
-            y[...,0] is Y flow; y[...,1] is X flow; y[...,2] is cell probability.
-        style (np.ndarray): 1D array of size 256 summarizing the style of the image, if tiled it is averaged over tiles.
+    batch_size: Optional[int]
+        Number of tiles to run in a batch. Defaults to 8.
+
+    rsz: Optional[float]
+        Resize coefficient(s) for image. Defaults to 1.0.
+
+    augment: Optional[bool]:
+        Tiles image with overlapping tiles and flips
+        overlapped regions to augment.
+        Defaults to False.
+
+    tile: Optional[bool]
+        Tiles image to ensure GPU/CPU memory usage
+        limited (recommended); cannot be turned off
+        for 3D segmentation.
+        Defaults to True.
+
+    tile_overlap: Optional[float]
+        Fraction of overlap of tiles when computing flows.
+        Defaults to 0.1.
+
+    bsize: Optional[int]
+        Size of tiles to use in pixels [bsize x bsize].
+        Defaults to 224.
+
+    Returns
+    -------
+    y: np.ndarray
+        output of network, if tiled it is averaged in
+        tile overlaps. Size of [Ly x Lx x 3]
+        or [Lz x Ly x Lx x 3]. y[...,0] is Y flow; y[...,1]
+        is X and flow; y[...,2] is cell probability.
+
+    style: np.ndarray
+        1D array of size 256 summarizing the style of the image,
+        if tiled it is averaged over tiles.
     """
+
     if imgs.ndim == 4:
         # make image Lz x nchan x Ly x Lx for net
         imgs = np.transpose(imgs, (0, 3, 1, 2))
@@ -69,8 +98,6 @@ def run_net(
     # pad image for net so Ly and Lx are divisible by 4
     imgs, ysub, xsub = transforms.pad_image_ND(imgs)
 
-    # slices from padding
-    #         slc = [slice(0, self.nclasses) for n in range(imgs.ndim)] # changed from imgs.shape[n]+1 for first slice size
     slc = [slice(0, imgs.shape[n] + 1) for n in range(imgs.ndim)]
     slc[-3] = slice(0, 3)
     slc[-2] = slice(ysub[0], ysub[-1] + 1)
@@ -106,20 +133,42 @@ def run_net(
 def _run_tiled(net, imgi, batch_size=8, augment=False, bsize=224, tile_overlap=0.1):
     """
     Run network on tiles of size [bsize x bsize]
+    Faster if augment is False.
 
-    (faster if augment is False)
+    Parameters
+    ----------
+    imgi: np.ndarray
+        The input image or stack of images of
+        size [Ly x Lx x nchan] or [Lz x Ly x Lx x nchan].
 
-    Args:
-        imgs (np.ndarray): The input image or stack of images of size [Ly x Lx x nchan] or [Lz x Ly x Lx x nchan].
-        batch_size (int, optional): Number of tiles to run in a batch. Defaults to 8.
-        augment (bool, optional): Tiles image with overlapping tiles and flips overlapped regions to augment. Defaults to False.
-        tile_overlap (float, optional): Fraction of overlap of tiles when computing flows. Defaults to 0.1.
-        bsize (int, optional): Size of tiles to use in pixels [bsize x bsize]. Defaults to 224.
+    batch_size: Optional[int]
+        Number of tiles to run in a batch. Defaults to 8.
 
-    Returns:
-        y (np.ndarray): output of network, if tiled it is averaged in tile overlaps. Size of [Ly x Lx x 3] or [Lz x Ly x Lx x 3].
-            y[...,0] is Y flow; y[...,1] is X flow; y[...,2] is cell probability.
-        style (np.ndarray): 1D array of size 256 summarizing the style of the image, if tiled it is averaged over tiles.
+    augment: Optional[bool]:
+        Tiles image with overlapping tiles and flips
+        overlapped regions to augment.
+        Defaults to False.
+
+    bsize: Optional[int]
+        Size of tiles to use in pixels [bsize x bsize].
+        Defaults to 224.
+
+    tile_overlap: Optional[float]
+        Fraction of overlap of tiles when computing flows.
+        Defaults to 0.1.
+
+    Returns
+    -------
+    y: np.ndarray
+        output of network, if tiled it is averaged in
+        tile overlaps. Size of [Ly x Lx x 3]
+        or [Lz x Ly x Lx x 3]. y[...,0] is Y flow; y[...,1]
+        is X and flow; y[...,2] is cell probability.
+
+    style: np.ndarray
+        1D array of size 256 summarizing the style of the image,
+        if tiled it is averaged over tiles.
+
     """
     nout = net.nout
     if imgi.ndim == 4:
@@ -139,7 +188,6 @@ def _run_tiled(net, imgi, batch_size=8, augment=False, bsize=224, tile_overlap=0
         if ny * nx > batch_size:
             ziterator = trange(Lz, file=tqdm_out)
             for i in ziterator:
-                # print("Running first if _run_tiled: ", Lz, "Iter: ", ziterator, " img shape: ", imgi[i].shape, " batch_size: ", batch_size)
                 yfi, stylei = _run_tiled(
                     net,
                     imgi[i],
@@ -157,7 +205,6 @@ def _run_tiled(net, imgi, batch_size=8, augment=False, bsize=224, tile_overlap=0
             nimgs = max(2, int(np.round(batch_size / ntiles)))
             niter = int(np.ceil(Lz / nimgs))
             ziterator = trange(niter, file=tqdm_out)
-            # print("Run second tiled batch size: ", batch_size, " nimages: ", nimgs)
 
             for k in ziterator:
                 IMGa = np.zeros((ntiles * nimgs, nchan, ly, lx), np.float32)
@@ -168,21 +215,22 @@ def _run_tiled(net, imgi, batch_size=8, augment=False, bsize=224, tile_overlap=0
                         augment=augment,
                         tile_overlap=tile_overlap,
                     )
-                    IMGa[i * ntiles : (i + 1) * ntiles] = np.reshape(
+                    IMGa[i * ntiles : (i + 1) * ntiles] = np.reshape(  # noqa: E203
                         IMG, (ny * nx, nchan, ly, lx)
                     )
-                # print("Image A: ", IMGa.shape)
                 ya, stylea = _forward(net, IMGa)
                 for i in range(min(Lz - k * nimgs, nimgs)):
-                    y = ya[i * ntiles : (i + 1) * ntiles]
+                    y = ya[i * ntiles : (i + 1) * ntiles]  # noqa: E203
                     if augment:
                         y = np.reshape(y, (ny, nx, 3, ly, lx))
                         y = transforms.unaugment_tiles(y)
                         y = np.reshape(y, (-1, 3, ly, lx))
                     yfi = transforms.average_tiles(y, ysub, xsub, Ly, Lx)
-                    yfi = yfi[:, : imgi.shape[2], : imgi.shape[3]]
+                    yfi = yfi[:, : imgi.shape[2], : imgi.shape[3]]  # noqa: E203
                     yf[k * nimgs + i] = yfi
-                    stylei = stylea[i * ntiles : (i + 1) * ntiles].sum(axis=0)
+                    stylei = stylea[i * ntiles : (i + 1) * ntiles].sum(  # noqa: E203
+                        axis=0
+                    )
                     stylei /= (stylei**2).sum() ** 0.5
                     styles.append(stylei)
         return yf, np.array(styles)
@@ -296,7 +344,7 @@ def run_2D_cellpose(
     xsl = transforms.resize_image(xsl, rsz=rescaling[img_axis])
 
     print(
-        f"running {sstr[img_axis]}: {shape[0]} planes of size ({shape[1]}, {shape[2]}) - batch size: {batch_size} - Resized shape: {xsl.shape} - Orig shape {imgs.shape} - Rescaling: {rescaling} - Anisotropy: {anisotropy} - Resize: {rsz}"
+        f"running {sstr[img_axis]}: {shape[0]} planes of size ({shape[1]}, {shape[2]}) - batch size: {batch_size} - Resized shape: {xsl.shape} - Orig shape {imgs.shape} - Rescaling: {rescaling} - Anisotropy: {anisotropy} - Resize: {rsz}"  # noqa: E501
     )
 
     y, style = run_net(
@@ -361,7 +409,6 @@ def run_cellpose_net(
     model: CellposeModel,
     axis: int,
     channels: Optional[List[int]] = [0, 0],
-    z_axis: Optional[int] = 0,
     normalize: Optional[bool] = False,
     diameter: Optional[int] = 15,
     anisotropy: Optional[float] = 1.0,
@@ -613,7 +660,7 @@ def large_scale_cellpose_gradients_per_axis(
         batch_size=batch_size,
         dtype=np.float32,  # Allowed data type to process with pytorch cuda
         super_chunksize=super_chunksize,
-        lazy_callback_fn=None,  # partial_lazy_deskewing,
+        lazy_callback_fn=lazy_callback_fn,  # partial_lazy_deskewing,
         logger=logger,
         device=device,
         pin_memory=pin_memory,
@@ -676,7 +723,7 @@ def large_scale_cellpose_gradients_per_axis(
     )
 
     logger.info(
-        f"{20*'='} Starting estimation of cellpose combined gradients - Axis {axis} - Channels {cell_channels} {20*'='}"
+        f"{20*'='} Starting estimation of cellpose combined gradients - Axis {axis} - Channels {cell_channels} {20*'='}"  # noqa: E501
     )
 
     local_normalization = False if global_normalization else True
@@ -743,7 +790,7 @@ def large_scale_cellpose_gradients_per_axis(
         output_gradients[global_coord_pos] = output_prediction
 
         logger.info(
-            f"Processing Batch {i}: {sample.batch_tensor.shape} - Pinned?: {sample.batch_tensor.is_pinned()} - dtype: {sample.batch_tensor.dtype} - device: {sample.batch_tensor.device} - global_coords: {global_coord_pos} - Pred shape: {y.shape}"
+            f"Processing Batch {i}: {sample.batch_tensor.shape} - Pinned?: {sample.batch_tensor.is_pinned()} - dtype: {sample.batch_tensor.dtype} - device: {sample.batch_tensor.device} - global_coords: {global_coord_pos} - Pred shape: {y.shape}"  # noqa: E501
         )
 
         # Cleaning up memory
@@ -894,14 +941,14 @@ def predict_gradients(
 
     combined_percentiles = None
     if global_normalization:
-        print(f"Computing global percentiles...")
+        print("Computing global percentiles...")
         combined_percentiles, chunked_percentiles = compute_percentiles(
             lazy_data=lazy_data,
             target_size_mb=target_size_mb,
             dask_folder=scratch_folder,
             percentile_range=percentile_range,
             min_cell_volume=min_cell_volume,
-            n_workers=16,
+            n_workers=utils.get_code_ocean_cpu_limit(),  # 16,
             threads_per_worker=1,
             combine_method="median",
         )
@@ -1001,7 +1048,7 @@ def main():
     """
     Main function
     """
-    BUCKET_NAME = "aind-open-data"
+    # BUCKET_NAME = "aind-open-data"
     IMAGE_PATH = "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-02-09_13-28-49"
     TILE_NAME = "channel_405.zarr"
     # dataset_path = f"s3://{BUCKET_NAME}/{IMAGE_PATH}/{TILE_NAME}"

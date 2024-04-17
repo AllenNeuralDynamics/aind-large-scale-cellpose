@@ -294,22 +294,25 @@ def compute_chunked_mask(
     if len(bigc) > 0 and (len(bigc) > 1 or bigc[0] != 0):
         second_mask = fastremap.mask(second_mask, bigc)
 
-    # unique_values_orig = np.unique(second_mask)
+    """
+    unique_values_orig = np.unique(second_mask)
 
-    # if len(unique_values_orig) >= 2: # Make sure that we have something more than 0's
-    #     # Camilo Laiton's Note:
-    #     # Even though it looks weird to remap the values to old ids
-    #     # it's necessary so we don't have skip labels
-    #     # but we guarantee that we still have the precomputed global IDs
-    #     second_mask_start = unique_values_orig[1]
+    if len(unique_values_orig) >= 2: # Make sure that we have something more than 0's
+        # Camilo Laiton's Note:
+        # Even though it looks weird to remap the values to old ids
+        # it's necessary so we don't have skip labels
+        # but we guarantee that we still have the precomputed global IDs
+        second_mask_start = unique_values_orig[1]
 
-    #     fastremap.renumber(second_mask, in_place=True, start=second_mask_start)  #convenient to guarantee non-skipped labels
-    #     unique_values_new = np.unique(second_mask)
+        # convenient to guarantee non-skipped labels
+        fastremap.renumber(second_mask, in_place=True, start=second_mask_start)  # noqa: E501
+        unique_values_new = np.unique(second_mask)
 
-    #     for i, new_id in enumerate(unique_values_new):
-    #         second_mask[second_mask == new_id] = unique_values_orig[i]
+        for i, new_id in enumerate(unique_values_new):
+            second_mask[second_mask == new_id] = unique_values_orig[i]
 
-    #     second_mask = np.reshape(second_mask, chunked_shape)
+        second_mask = np.reshape(second_mask, chunked_shape)
+    """
 
     third_mask = second_mask.copy()
     if flow_threshold > 0 and dP_masked is not None:
@@ -525,7 +528,7 @@ def execute_worker(
     )
 
     logger.info(
-        f"Global slices: {global_coord_pos} - Unpadded global slices: {unpadded_global_slice[1:]} - Local slices: {unpadded_local_slice[1:]}"
+        f"Global slices: {global_coord_pos} - Unpadded global slices: {unpadded_global_slice[1:]} - Local slices: {unpadded_local_slice[1:]}"  # noqa: E501
     )
 
     global_points_path = (
@@ -544,7 +547,7 @@ def execute_worker(
         )
         chunked_hist = hists[global_coord_pos[1:]]
         logger.info(
-            f"Worker [{os.getpid()}] Computing seg masks in overlapping chunks: {picked_gl_to_lc.shape[0]} - data block shape: {data.shape} - hist shape: {chunked_hist.shape}"
+            f"Worker [{os.getpid()}] Computing seg masks in overlapping chunks: {picked_gl_to_lc.shape[0]} - data block shape: {data.shape} - hist shape: {chunked_hist.shape}"  # noqa: E501
         )
 
         chunked_seg_mask = compute_chunked_mask(
@@ -853,7 +856,7 @@ def generate_masks(
             logger.info(f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs")
 
             # Wait for all processes to finish
-            results = [job.get() for job in jobs]
+            results = [job.get() for job in jobs]  # noqa: F841
 
             # Setting variables back to init
             curr_picked_blocks = 0
@@ -868,7 +871,7 @@ def generate_masks(
         ]
 
         # Wait for all processes to finish
-        results = [job.get() for job in jobs]
+        results = [job.get() for job in jobs]  # noqa: F841
 
         # Setting variables back to init
         curr_picked_blocks = 0

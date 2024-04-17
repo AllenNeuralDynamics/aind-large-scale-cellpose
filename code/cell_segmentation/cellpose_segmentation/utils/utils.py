@@ -128,7 +128,6 @@ def profile_resources(
         # GPU resources
         if gpu_resources is not None:
             gpu_metrics = get_gpu_metrics()
-            curr_idxs = list(gpu_metrics.keys())
 
             for curr_idx, vals in gpu_metrics.items():
                 gpu_resources[curr_idx]["gpu_utilization"].append(
@@ -204,7 +203,6 @@ def generate_resources_graphs(
 
     if gpu_len:
         gpu_indexes = list(gpu_resources.keys())
-        gpu_indexes_len = len(gpu_indexes)
 
         plt.figure(figsize=(15, 15))
 
@@ -274,7 +272,7 @@ def create_logger(output_log_path: str, mode: Optional[str] = "w") -> logging.Lo
         Created logger pointing to
         the file path.
     """
-    CURR_DATE_TIME = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    # CURR_DATE_TIME = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     LOGS_FILE = f"{output_log_path}/segmentation_log.log"  # _{CURR_DATE_TIME}.log"
 
     logging.basicConfig(

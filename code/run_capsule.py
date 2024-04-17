@@ -2,7 +2,6 @@
 
 import os
 
-from cell_segmentation.cellpose_segmentation.utils import utils
 from cell_segmentation.segment import segment
 
 

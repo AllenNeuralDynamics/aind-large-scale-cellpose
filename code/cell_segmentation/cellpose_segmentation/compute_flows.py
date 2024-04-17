@@ -169,7 +169,7 @@ def execute_worker(
     pflows_non_overlaped = pflows[unpadded_local_slice]
 
     logger.info(
-        f"Worker [{os.getpid()}]: Saving pflows from {global_coord_pos} to {unpadded_global_slice}. Pshape: {pflows_non_overlaped.shape}"
+        f"Worker [{os.getpid()}]: Saving pflows from {global_coord_pos} to {unpadded_global_slice}. Pshape: {pflows_non_overlaped.shape}"  # noqa: E501
     )
 
     logger.info(f"Worker [{os.getpid()}] Computing histogram in overlapping chunks")
@@ -353,7 +353,7 @@ def generate_flows_and_centroids(
         batch_size=batch_size,
         dtype=np.float32,  # Allowed data type to process with pytorch cuda
         super_chunksize=super_chunksize,
-        lazy_callback_fn=None,  # partial_lazy_deskewing,
+        lazy_callback_fn=lazy_callback_fn,  # partial_lazy_deskewing,
         logger=logger,
         device=device,
         pin_memory=pin_memory,
@@ -385,7 +385,7 @@ def generate_flows_and_centroids(
     )
 
     logger.info(
-        f"Creating zarr flows in path: {output_pflow_path} - {output_pflow} chunks: {output_pflow.chunks}"
+        f"Creating zarr flows in path: {output_pflow_path} - {output_pflow} chunks: {output_pflow.chunks}"  # noqa: E501
     )
 
     use_GPU = core.use_gpu()
@@ -446,7 +446,7 @@ def generate_flows_and_centroids(
             logger.info(f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs")
 
             # Wait for all processes to finish
-            results = [job.get() for job in jobs]
+            results = [job.get() for job in jobs]  # noqa: F841
 
             # Setting variables back to init
             curr_picked_blocks = 0
@@ -461,7 +461,7 @@ def generate_flows_and_centroids(
         ]
 
         # Wait for all processes to finish
-        results = [job.get() for job in jobs]
+        results = [job.get() for job in jobs]  # noqa: F841
 
         # Setting variables back to init
         curr_picked_blocks = 0
@@ -533,7 +533,7 @@ def main(
 
 if __name__ == "__main__":
     main(
-        combined_gradients_zarr_path="/Users/camilo.laiton/repositories/dispim-cell-seg-exp/data/good_combined_gradients.zarr",
+        combined_gradients_zarr_path="./path/to/combined_gradients.zarr",
         output_pflow="./results/pflows.zarr",
         output_hist_path="./results/hists.zarr",
     )

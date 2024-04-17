@@ -48,7 +48,8 @@ def get_channel_percentiles(
     min_cell_volume: Optional[float] = 0,
 ):
     """
-    Partitions the last 3 dimensions of a Dask array into non-overlapping blocks and computes the percentile.
+    Partitions the last 3 dimensions of a Dask array
+    into non-overlapping blocks and computes the percentile.
 
     Parameters
     ----------
@@ -98,6 +99,10 @@ def compute_chunked_percentiles(
     threads_per_worker: Optional[int] = 1,
 ) -> Dict:
     """
+    Computes the percentile in a dataset using chunks.
+
+    Parameters
+    ----------
     lazy_data: ArrayLike
         Loaded lazy array. This could be a multichannel
         lazy array in which case, percentiles will be computed
@@ -227,6 +232,10 @@ def compute_percentiles(
     combine_method: Optional[str] = "median",
 ) -> Tuple[Dict, Dict]:
     """
+    Computes the global percentile in a dataset.
+
+    Parameters
+    ----------
     lazy_data: ArrayLike
         Loaded lazy array. This could be a multichannel
         lazy array in which case, percentiles will be computed
@@ -283,8 +292,8 @@ def compute_percentiles(
 def main():
     """Main function to compute percentiles"""
 
-    dataset_path = "s3://aind-open-data/HCR_BL6-000_2023-06-1_00-00-00_fused_2024-02-09_13-28-49/channel_405.zarr"
-    nuclear_channel = "s3://aind-open-data/HCR_BL6-000_2023-06-1_00-00-00_fused_2024-02-09_13-28-49/channel_3.zarr"
+    dataset_path = "/path/to/channel_405.zarr"
+    nuclear_channel = "/path/to/channel/channel_3.zarr"
     multiscale = "2"
     target_size_mb = 4096
     n_workers = 10
