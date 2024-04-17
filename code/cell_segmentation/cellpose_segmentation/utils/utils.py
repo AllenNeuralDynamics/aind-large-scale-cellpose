@@ -147,7 +147,7 @@ def generate_resources_graphs(
     memory_usages: List,
     output_path: str,
     prefix: str,
-    gpu_resources: Optional[List] = [],
+    gpu_resources: Optional[List] = {},
 ):
     """
     Profiles compute resources usage.
