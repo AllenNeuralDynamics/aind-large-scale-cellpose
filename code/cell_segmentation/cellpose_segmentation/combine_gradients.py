@@ -97,7 +97,7 @@ def execute_worker(
     output_combined_gradients[combined_gradients_coord_pos] = dP_masked
 
     logger.info(
-        f"Worker [{os.getpid()}] - Cell probability coords: {cellprob_coord_pos} - dP masked coords: {combined_gradients_coord_pos}"
+        f"Worker [{os.getpid()}] - Cell probability coords: {cellprob_coord_pos} - dP masked coords: {combined_gradients_coord_pos}"  # noqa: E501
     )
 
 
@@ -242,7 +242,7 @@ def combine_gradients(
         batch_size=batch_size,
         dtype=np.float32,  # Allowed data type to process with pytorch cuda
         super_chunksize=super_chunksize,
-        lazy_callback_fn=None,  # partial_lazy_deskewing,
+        lazy_callback_fn=lazy_callback_fn,  # partial_lazy_deskewing,
         logger=logger,
         device=device,
         pin_memory=pin_memory,
@@ -268,7 +268,7 @@ def combine_gradients(
         dtype=np.uint8,
     )
     logger.info(
-        f"Combined gradients: {output_combined_gradients} - chunks: {output_combined_gradients.chunks}"
+        f"Combined gradients: {output_combined_gradients} - chunks: {output_combined_gradients.chunks}"  # noqa: E501
     )
     logger.info(
         f"Cell probabilities path: {output_cellprob} - chunks: {output_cellprob.chunks}"
@@ -302,7 +302,7 @@ def combine_gradients(
 
     for i, sample in enumerate(zarr_data_loader):
         logger.info(
-            f"Batch {i}: {sample.batch_tensor.shape} - Pinned?: {sample.batch_tensor.is_pinned()} - dtype: {sample.batch_tensor.dtype} - device: {sample.batch_tensor.device}"
+            f"Batch {i}: {sample.batch_tensor.shape} - Pinned?: {sample.batch_tensor.is_pinned()} - dtype: {sample.batch_tensor.dtype} - device: {sample.batch_tensor.device}"  # noqa: E501
         )
 
         picked_blocks.append(
@@ -329,7 +329,7 @@ def combine_gradients(
             logger.info(f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs")
 
             # Wait for all processes to finish
-            results = [job.get() for job in jobs]
+            results = [job.get() for job in jobs]  # noqa: F841
 
             # Setting variables back to init
             curr_picked_blocks = 0
@@ -344,7 +344,7 @@ def combine_gradients(
         ]
 
         # Wait for all processes to finish
-        results = [job.get() for job in jobs]
+        results = [job.get() for job in jobs]  # noqa: F841
 
         # Setting variables back to init
         curr_picked_blocks = 0
