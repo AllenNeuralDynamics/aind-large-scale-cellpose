@@ -20,12 +20,12 @@ def run():
     NUCLEI_CHN = "channel_3.zarr"
 
     # NOTE: Change the cell diameter based on multiscale
-    multiscale = "4"
+    multiscale = "2"
 
     # Cellpose params
     cellpose_params = {
         "model_name": "cyto",
-        "cell_diameter": 15,
+        "cell_diameter": 30,
         "min_cell_volume": 95,
         "percentile_range": (10, 99),
         "flow_threshold": 0.0,
