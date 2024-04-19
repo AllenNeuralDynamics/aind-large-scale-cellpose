@@ -21,6 +21,7 @@ from cellpose.core import use_gpu  # , run_net
 from cellpose.core import _forward
 from cellpose.io import logger_setup
 from cellpose.models import CellposeModel, assign_device, transforms
+from torch.cuda import empty_cache
 from tqdm import trange
 
 from ._shared.types import ArrayLike, PathLike
@@ -792,9 +793,11 @@ def large_scale_cellpose_gradients_per_axis(
         logger.info(
             f"Processing Batch {i}: {sample.batch_tensor.shape} - Pinned?: {sample.batch_tensor.is_pinned()} - dtype: {sample.batch_tensor.dtype} - device: {sample.batch_tensor.device} - global_coords: {global_coord_pos} - Pred shape: {y.shape}"  # noqa: E501
         )
+        if i == 0:
+            break
 
-        # Cleaning up memory
-        # torch.cuda.empty_cache()
+    # Cleaning up memory
+    empty_cache()
 
     end_time = time()
 
@@ -948,7 +951,7 @@ def predict_gradients(
             dask_folder=scratch_folder,
             percentile_range=percentile_range,
             min_cell_volume=min_cell_volume,
-            n_workers=utils.get_code_ocean_cpu_limit(),  # 16,
+            n_workers=int(utils.get_code_ocean_cpu_limit()),  # 16,
             threads_per_worker=1,
             combine_method="median",
         )

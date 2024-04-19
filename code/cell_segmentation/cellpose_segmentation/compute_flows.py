@@ -67,40 +67,46 @@ def computing_overlapping_hist_and_seed_finding(
         and the histogram for the chunk of data. This histogram
         is unpadded based on the provided local coordinate system.
     """
-
-    pflows = []
-    edges = []
+    # Flatten p and compute edges
+    p_flatten = p.astype("int32").reshape(p.shape[0], -1)
     shape0 = p.shape[1:]
+    edges = [
+        np.arange(-0.5 - rpad, shape0[i] + 0.5 + rpad, 1) for i in range(len(shape0))
+    ]
+
+    # Compute histogram
+    h, _ = np.histogramdd(tuple(p_flatten), bins=edges)
+
+    hmax = h.copy()
     dims = p.shape[0]
 
     for i in range(dims):
-        pflows.append(p[i].flatten().astype("int32"))
-        edges.append(np.arange(-0.5 - rpad, shape0[i] + 0.5 + rpad, 1))
+        maximum_filter1d(hmax, 5, output=hmax, mode="constant", cval=0, axis=i)
 
-    h, _ = np.histogramdd(tuple(pflows), bins=edges)
-    hmax = h.copy()
-    for i in range(dims):
-        hmax = maximum_filter1d(hmax, 5, axis=i)
-
+    # Slice histograms
     h = h[unpadded_local_slice]
     hmax = hmax[unpadded_local_slice]
 
+    # Find seeds
     seeds = np.nonzero(np.logical_and(h - hmax > -1e-6, h > 10))
     Nmax = h[seeds]
     isort = np.argsort(Nmax)[::-1]
-    for s in seeds:
-        s[:] = s[isort]
+    seeds_sorted = tuple([s.flat[isort] for s in seeds])
 
-    pix = np.array(np.array(seeds).T).astype(np.uint32)
-    pix_global = pix + np.array([global_coord.start for global_coord in global_coords])
+    # Compute pixel coordinates
+    pix_local = np.column_stack(seeds_sorted).astype(np.uint32)
+    pix_global = pix_local + np.array(
+        [global_coord.start for global_coord in global_coords]
+    )
 
-    return pix_global, pix, h
+    return pix_global, pix_local, h
 
 
 def execute_worker(
     data: ArrayLike,
     batch_super_chunk: Tuple[slice],
     batch_internal_slice: Tuple[slice],
+    batch_internal_slice_global: Tuple[slice],
     overlap_prediction_chunksize: Tuple[int],
     dataset_shape: Tuple[int],
     sdevice: device,
@@ -125,6 +131,10 @@ def execute_worker(
         Internal slice of the current chunk of data. This
         is a local coordinate system based on the super chunk.
 
+    batch_internal_slice_global: Tuple[slice]
+        Global internal slice of the current chunk of data. This
+        is a local coordinate system based on the super chunk.
+
     overlap_prediction_chunksize: Tuple[int]
         Overlap area between chunks.
 
@@ -143,11 +153,11 @@ def execute_worker(
     logger: logging.Logger
         Logging object
     """
-
-    data = np.squeeze(data, axis=0)  # sample.batch_tensor.numpy()
+    start_time = time()
+    data = np.squeeze(data, axis=0)
 
     # Following flows
-    pflows, _ = follow_flows(data / 5.0, niter=200, interp=False, device=sdevice)
+    pflows, _ = follow_flows(data / 5.0, niter=100, interp=False, device=sdevice)
     pflows = pflows.astype(np.int32)
 
     (
@@ -168,11 +178,6 @@ def execute_worker(
 
     pflows_non_overlaped = pflows[unpadded_local_slice]
 
-    logger.info(
-        f"Worker [{os.getpid()}]: Saving pflows from {global_coord_pos} to {unpadded_global_slice}. Pshape: {pflows_non_overlaped.shape}"  # noqa: E501
-    )
-
-    logger.info(f"Worker [{os.getpid()}] Computing histogram in overlapping chunks")
     # Computing overlapping histogram and pixel seed finding
     global_seeds_overlp, local_seeds_overlp, hist_no_overlp = (
         computing_overlapping_hist_and_seed_finding(
@@ -188,9 +193,11 @@ def execute_worker(
     output_pflow[unpadded_global_slice] = pflows_non_overlaped
     output_hist[unpadded_global_slice[1:]] = hist_no_overlp
 
+    end_time = time()
+
     if local_seeds_overlp.shape[0]:
         logger.info(
-            f"Worker [{os.getpid()}] Points found in overlapping chunks: {local_seeds_overlp.shape}"
+            f"Worker [{os.getpid()}] Points found in {batch_internal_slice_global}: {local_seeds_overlp.shape[0]} - Time: {np.round(end_time - start_time, 2)} s"
         )
 
         # Saving seeds
@@ -307,7 +314,7 @@ def generate_flows_and_centroids(
             time_points,
             cpu_percentages,
             memory_usages,
-            20,
+            60,
         ),
     )
     profile_process.daemon = True
@@ -403,7 +410,7 @@ def generate_flows_and_centroids(
         f"Number of batches: {total_batches} - Samples per iteration: {samples_per_iter}"
     )
 
-    logger.info(f"{20*'='} Starting combination of gradients {20*'='}")
+    logger.info(f"{20*'='} Combining flows and creating histograms {20*'='}")
     start_time = time()
 
     # Setting exec workers to CO CPUs
@@ -419,12 +426,12 @@ def generate_flows_and_centroids(
     logger.info(f"Number of workers processing data: {exec_n_workers}")
 
     for i, sample in enumerate(zarr_data_loader):
-
         picked_blocks.append(
             {
                 "data": sample.batch_tensor.numpy(),
                 "batch_super_chunk": sample.batch_super_chunk[0],
                 "batch_internal_slice": sample.batch_internal_slice,
+                "batch_internal_slice_global": sample.batch_internal_slice_global[0],
                 "overlap_prediction_chunksize": overlap_prediction_chunksize,
                 "dataset_shape": zarr_dataset.lazy_data.shape,
                 "output_pflow": output_pflow,
@@ -438,12 +445,16 @@ def generate_flows_and_centroids(
 
         if curr_picked_blocks == exec_n_workers:
             # Assigning blocks to execution workers
+            time_proc_blocks = time()
+
             jobs = [
                 pool.apply_async(_execute_worker, args=(picked_block,))
                 for picked_block in picked_blocks
             ]
 
-            logger.info(f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs")
+            logger.info(
+                f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs -> Batch {i} Last slice in list: {sample.batch_internal_slice_global}"
+            )
 
             # Wait for all processes to finish
             results = [job.get() for job in jobs]  # noqa: F841
@@ -451,6 +462,10 @@ def generate_flows_and_centroids(
             # Setting variables back to init
             curr_picked_blocks = 0
             picked_blocks = []
+            time_proc_blocks_end = time()
+            logger.info(
+                f"Time processing blocks: {time_proc_blocks_end - time_proc_blocks}"
+            )
 
     if curr_picked_blocks != 0:
         logger.info(f"Blocks not processed inside of loop: {curr_picked_blocks}")

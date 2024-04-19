@@ -853,7 +853,9 @@ def generate_masks(
                 for picked_block in picked_blocks
             ]
 
-            logger.info(f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs")
+            logger.info(
+                f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs -> Batch {i} Last slice in list: {sample.batch_internal_slice_global}"
+            )
 
             # Wait for all processes to finish
             results = [job.get() for job in jobs]  # noqa: F841

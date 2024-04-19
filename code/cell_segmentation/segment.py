@@ -116,7 +116,7 @@ def segment(
             output_cellprob_path=output_cellprob_path,
             prediction_chunksize=(3, 3, 128, 128, 128),
             super_chunksize=(3, 3, 128, 128, 128),
-            target_size_mb=target_size_mb,
+            target_size_mb=None,
             n_workers=0,
             batch_size=1,
             results_folder=results_folder,
@@ -125,7 +125,7 @@ def segment(
         output_combined_pflows = f"{results_folder}/pflows.zarr"
         output_combined_hists = f"{results_folder}/hists.zarr"
 
-        # Large-scale generation of flows, centroids and hists
+        # # Large-scale generation of flows, centroids and hists
         cell_centroids_path = generate_flows_and_centroids(
             dataset_path=output_combined_gradients_path,
             output_pflow_path=output_combined_pflows,
@@ -152,7 +152,7 @@ def segment(
             original_dataset_shape=dataset_shape,
             cell_diameter=cell_diameter,
             prediction_chunksize=(3, 128, 128, 128),
-            target_size_mb=target_size_mb,
+            target_size_mb=None,
             n_workers=n_workers,
             batch_size=batch_size,
             super_chunksize=(3, 512, 512, 512),
