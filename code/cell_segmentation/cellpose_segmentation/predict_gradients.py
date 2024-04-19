@@ -793,8 +793,6 @@ def large_scale_cellpose_gradients_per_axis(
         logger.info(
             f"Processing Batch {i}: {sample.batch_tensor.shape} - Pinned?: {sample.batch_tensor.is_pinned()} - dtype: {sample.batch_tensor.dtype} - device: {sample.batch_tensor.device} - global_coords: {global_coord_pos} - Pred shape: {y.shape}"  # noqa: E501
         )
-        if i == 0:
-            break
 
     # Cleaning up memory
     empty_cache()
