@@ -518,8 +518,8 @@ def large_scale_cellpose_gradients_per_axis(
     target_size_mb: int,
     n_workers: int,
     batch_size: int,
-    results_folder: PathLike,
     image_metadata: Dict,
+    logger: logging.Logger,
     super_chunksize: Optional[Tuple[int, ...]] = None,
     lazy_callback_fn: Optional[Callable[[ArrayLike], ArrayLike]] = None,
     global_normalization: Optional[bool] = True,
@@ -565,10 +565,6 @@ def large_scale_cellpose_gradients_per_axis(
         Number of prediction chunksize blocks that will be pulled
         per worker
 
-    results_folder: PathLike
-        Path where the results folder for cell segmentation
-        is located.
-
     super_chunksize: Optional[Tuple[int, ...]]
         Super chunk size. Could be None if target_size_mb is provided.
         Default: None
@@ -602,13 +598,8 @@ def large_scale_cellpose_gradients_per_axis(
     if n_workers > co_cpus:
         raise ValueError(f"Provided workers {n_workers} > current workers {co_cpus}")
 
-    mode = "a"
-    if axis == 0:
-        mode = "w"
-
-    logger = utils.create_logger(output_log_path=results_folder, mode=mode)
     logger.info(
-        f"{20*'='} Z1 Large-Scale Cellpose Gradient Prediction in Axis {axis} {20*'='}"
+        f"{20*'='} Large-Scale Cellpose - Gradient Prediction in Axis {axis} {20*'='}"
     )
 
     if axis == 0:
@@ -925,6 +916,8 @@ def predict_gradients(
     profile_process.daemon = True
     profile_process.start()
 
+    logger = utils.create_logger(output_log_path=results_folder)
+
     # Estimating gradients per axis
     len_datasets = len(dataset_paths)
     lazy_data = None
@@ -938,11 +931,13 @@ def predict_gradients(
             multiscales=[multiscale, multiscale],
             concat_axis=-4,  # Concatenation axis
         )
-        print("Combined background and nuclear channel: ", lazy_data, lazy_data.dtype)
+        logger.info(
+            "Combined background and nuclear channel: ", lazy_data, lazy_data.dtype
+        )
 
     combined_percentiles = None
     if global_normalization:
-        print("Computing global percentiles...")
+        logger.info("Computing global percentiles...")
         combined_percentiles, chunked_percentiles = compute_percentiles(
             lazy_data=lazy_data,
             target_size_mb=target_size_mb,
@@ -953,7 +948,7 @@ def predict_gradients(
             threads_per_worker=1,
             combine_method="median",
         )
-        print("Estimated global percentiles: ", combined_percentiles)
+        logger.info("Estimated global percentiles: ", combined_percentiles)
         np.save(f"{results_folder}/combined_percentiles.npy", combined_percentiles)
         np.save(f"{results_folder}/chunked_percentiles.npy", chunked_percentiles)
 
@@ -1027,6 +1022,7 @@ def predict_gradients(
             results_folder=results_folder,
             cell_channels=cell_channels,
             chn_percentiles=combined_percentiles,
+            logger=logger,
         )
 
     # Getting tracked resources and plotting image

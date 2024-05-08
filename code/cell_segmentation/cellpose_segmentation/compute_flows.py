@@ -20,7 +20,6 @@ from aind_large_scale_prediction.generator.utils import (
 from aind_large_scale_prediction.io import ImageReaderFactory
 from cellpose import core
 from cellpose.dynamics import follow_flows
-from cellpose.io import logger_setup
 from cellpose.models import assign_device
 from scipy.ndimage import maximum_filter1d
 from torch import device
@@ -197,7 +196,7 @@ def execute_worker(
 
     if local_seeds_overlp.shape[0]:
         logger.info(
-            f"Worker [{os.getpid()}] Points found in {batch_internal_slice_global}: {local_seeds_overlp.shape[0]} - Time: {np.round(end_time - start_time, 2)} s"
+            f"Worker [{os.getpid()}] Points found in {batch_internal_slice_global}: {local_seeds_overlp.shape[0]} - Time: {np.round(end_time - start_time, 2)} s"  # noqa: E501
         )
 
         # Saving seeds
@@ -282,6 +281,7 @@ def generate_flows_and_centroids(
     PathLike:
         Path where the global cell centroids where generated.
     """
+    axis_overlap = np.ceil(axis_overlap)
 
     predictions_folder = f"{results_folder}/flow_results"
     # local_seeds_folder = f"{predictions_folder}/seeds/local_overlap_overlap_unpadded"
@@ -299,7 +299,7 @@ def generate_flows_and_centroids(
         raise ValueError(f"Provided workers {n_workers} > current workers {co_cpus}")
 
     logger = utils.create_logger(output_log_path=results_folder, mode="a")
-    logger.info(f"{20*'='} Z1 Large-Scale Generate Seeds {20*'='}")
+    logger.info(f"{20*'='} Large-Scale Cellpose - Generate Seeds {20*'='}")
 
     logger.info(f"Processing dataset {dataset_path}")
 
@@ -455,7 +455,7 @@ def generate_flows_and_centroids(
             ]
 
             logger.info(
-                f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs -> Batch {i} Last slice in list: {sample.batch_internal_slice_global}"
+                f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs -> Batch {i} Last slice in list: {sample.batch_internal_slice_global}"  # noqa: E501
             )
 
             # Wait for all processes to finish

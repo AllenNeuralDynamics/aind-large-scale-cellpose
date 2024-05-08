@@ -670,6 +670,7 @@ def generate_masks(
         it is being ignored, it needs the dp_masked data.
 
     """
+    axis_overlap = np.ceil(axis_overlap)
 
     global_seeds = None
     output_seg_dtype = None
@@ -698,7 +699,7 @@ def generate_masks(
         raise ValueError(f"Provided workers {n_workers} > current workers {co_cpus}")
 
     logger = utils.create_logger(output_log_path=results_folder, mode="a")
-    logger.info(f"{20*'='} Z1 Large-Scale Generate Segmentation Mask {20*'='}")
+    logger.info(f"{20*'='} Large-Scale Cellpose - Generate Masks {20*'='}")
 
     logger.info(f"Processing dataset {dataset_path}")
 
@@ -856,7 +857,7 @@ def generate_masks(
             ]
 
             logger.info(
-                f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs -> Batch {i} Last slice in list: {sample.batch_internal_slice_global}"
+                f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs -> Batch {i} Last slice in list: {sample.batch_internal_slice_global}"  # noqa: E501
             )
 
             # Wait for all processes to finish
