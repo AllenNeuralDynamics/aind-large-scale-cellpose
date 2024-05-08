@@ -396,8 +396,6 @@ def generate_flows_and_centroids(
     )
 
     use_GPU = core.use_gpu()
-    logger.info(f"GPU activated: {use_GPU}")
-    logger_setup()
 
     sdevice, gpu = assign_device(use_torch=use_GPU, gpu=use_GPU)
 
@@ -442,6 +440,8 @@ def generate_flows_and_centroids(
             }
         )
         curr_picked_blocks += 1
+
+        logger.info(f"Dispatcher loading block: {curr_picked_blocks} - batch: {i}")
 
         if curr_picked_blocks == exec_n_workers:
             # Assigning blocks to execution workers

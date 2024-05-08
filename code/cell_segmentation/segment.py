@@ -131,7 +131,7 @@ def segment(
             output_pflow_path=output_combined_pflows,
             output_hist_path=output_combined_hists,
             multiscale=".",
-            cell_diameter=cell_diameter,
+            cell_diameter=cell_diameter//2,  # Used to get the overlapping area
             prediction_chunksize=(3, 128, 128, 128),
             target_size_mb=target_size_mb,
             n_workers=n_workers,
@@ -150,7 +150,7 @@ def segment(
             cell_centroids_path=cell_centroids_path,
             output_seg_mask_path=output_segmentation_mask,
             original_dataset_shape=dataset_shape,
-            cell_diameter=cell_diameter,
+            cell_diameter=cell_diameter//2,  # Used to get the overlapping area
             prediction_chunksize=(3, 128, 128, 128),
             target_size_mb=None,
             n_workers=n_workers,
