@@ -600,7 +600,7 @@ def generate_masks(
     cell_centroids_path: PathLike,
     output_seg_mask_path: PathLike,
     original_dataset_shape: Tuple[int, ...],
-    cell_diameter: int,
+    axis_overlap: int,
     prediction_chunksize: Tuple[int, ...],
     target_size_mb: int,
     n_workers: int,
@@ -633,8 +633,10 @@ def generate_masks(
         Path where we want to output the global
         segmentation mask.
 
-    cell_diameter: int
-        Cell diameter for cellpose.
+    axis_overlap: int
+        Overlap in each axis. This would be 2*axis_overlap
+        since it will be in each side. Recommended to be
+        cell_diameter * 2.
 
     prediction_chunksize: Tuple[int, ...]
         Prediction chunksize.
@@ -734,7 +736,7 @@ def generate_masks(
 
     # Getting overlap prediction chunksize
     overlap_prediction_chunksize = (0,) + tuple(
-        [cell_diameter * 2] * len(prediction_chunksize[-3:])
+        [axis_overlap * 2] * len(prediction_chunksize[-3:])
     )
     logger.info(
         f"Overlap size based on cell diameter * 2: {overlap_prediction_chunksize}"
@@ -938,7 +940,7 @@ def main(
         cell_centroids_path=cell_centroids_path,
         output_seg_mask_path=output_seg_mask,
         original_dataset_shape=(1, 1, 114, 827, 598),
-        cell_diameter=cell_diameter,
+        axis_overlap=cell_diameter,
         prediction_chunksize=prediction_chunksize,
         target_size_mb=target_size_mb,
         n_workers=n_workers,
