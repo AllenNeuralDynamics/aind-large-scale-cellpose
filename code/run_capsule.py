@@ -50,7 +50,7 @@ def run():
             "prediction_chunksize": (3, 128, 128, 128),
         },
         "generate_masks": {
-            "output_mask": f"{scratch_folder}/segmentation_mask.zarr",
+            "output_mask": f"{results_folder}/segmentation_mask.zarr",
             "prediction_chunksize": (3, 128, 128, 128),
             "super_chunksize": (3, 512, 512, 512),
         },
