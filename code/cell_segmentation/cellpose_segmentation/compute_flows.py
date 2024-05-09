@@ -20,7 +20,6 @@ from aind_large_scale_prediction.generator.utils import (
 from aind_large_scale_prediction.io import ImageReaderFactory
 from cellpose import core
 from cellpose.dynamics import follow_flows
-from cellpose.io import logger_setup
 from cellpose.models import assign_device
 from scipy.ndimage import maximum_filter1d
 from torch import device
@@ -197,7 +196,7 @@ def execute_worker(
 
     if local_seeds_overlp.shape[0]:
         logger.info(
-            f"Worker [{os.getpid()}] Points found in {batch_internal_slice_global}: {local_seeds_overlp.shape[0]} - Time: {np.round(end_time - start_time, 2)} s"
+            f"Worker [{os.getpid()}] Points found in {batch_internal_slice_global}: {local_seeds_overlp.shape[0]} - Time: {np.round(end_time - start_time, 2)} s"  # noqa: E501
         )
 
         # Saving seeds
@@ -219,7 +218,7 @@ def generate_flows_and_centroids(
     multiscale: str,
     output_pflow_path: PathLike,
     output_hist_path: PathLike,
-    cell_diameter: int,
+    axis_overlap: int,
     prediction_chunksize: Tuple[int, ...],
     target_size_mb: int,
     n_workers: int,
@@ -249,8 +248,10 @@ def generate_flows_and_centroids(
     output_hist_path: PathLike
         Path where we want to output the histograms.
 
-    cell_diameter: int
-        Cell diameter for cellpose.
+    axis_overlap: int
+        Overlap in each axis. This would be 2*axis_overlap
+        since it will be in each side. Recommended to be
+        cell_diameter * 2.
 
     prediction_chunksize: Tuple[int, ...]
         Prediction chunksize.
@@ -280,6 +281,7 @@ def generate_flows_and_centroids(
     PathLike:
         Path where the global cell centroids where generated.
     """
+    axis_overlap = np.ceil(axis_overlap).astype(np.uint16)
 
     predictions_folder = f"{results_folder}/flow_results"
     # local_seeds_folder = f"{predictions_folder}/seeds/local_overlap_overlap_unpadded"
@@ -297,7 +299,7 @@ def generate_flows_and_centroids(
         raise ValueError(f"Provided workers {n_workers} > current workers {co_cpus}")
 
     logger = utils.create_logger(output_log_path=results_folder, mode="a")
-    logger.info(f"{20*'='} Z1 Large-Scale Generate Seeds {20*'='}")
+    logger.info(f"{20*'='} Large-Scale Cellpose - Generate Seeds {20*'='}")
 
     logger.info(f"Processing dataset {dataset_path}")
 
@@ -335,7 +337,7 @@ def generate_flows_and_centroids(
 
     # Getting overlap prediction chunksize
     overlap_prediction_chunksize = (0,) + tuple(
-        [cell_diameter * 2] * len(prediction_chunksize[-3:])
+        [axis_overlap * 2] * len(prediction_chunksize[-3:])
     )
     logger.info(
         f"Overlap size based on cell diameter * 2: {overlap_prediction_chunksize}"
@@ -453,7 +455,7 @@ def generate_flows_and_centroids(
             ]
 
             logger.info(
-                f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs -> Batch {i} Last slice in list: {sample.batch_internal_slice_global}"
+                f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs -> Batch {i} Last slice in list: {sample.batch_internal_slice_global}"  # noqa: E501
             )
 
             # Wait for all processes to finish
@@ -535,7 +537,7 @@ def main(
         output_pflow_path=output_pflow,
         output_hist_path=output_hist_path,
         multiscale=".",
-        cell_diameter=cell_diameter,
+        axis_overlap=cell_diameter,
         prediction_chunksize=prediction_chunksize,
         target_size_mb=target_size_mb,
         n_workers=n_workers,

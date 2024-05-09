@@ -174,7 +174,7 @@ def combine_gradients(
         raise ValueError(f"Provided workers {n_workers} > current workers {co_cpus}")
 
     logger = utils.create_logger(output_log_path=results_folder, mode="a")
-    logger.info(f"{20*'='} Z1 Large-Scale Cellpose Combination of Gradients {20*'='}")
+    logger.info(f"{20*'='} Large-Scale Cellpose - Combination of Gradients {20*'='}")
 
     logger.info(f"Processing dataset {dataset_path}")
 

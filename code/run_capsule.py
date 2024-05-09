@@ -10,7 +10,7 @@ def run():
     # Code ocean folders
     results_folder = os.path.abspath("../results")
     data_folder = os.path.abspath("../data")
-    scratch_folder = os.path.abspath("../data")
+    scratch_folder = os.path.abspath("../scratch")
 
     # Dataset to process
     IMAGE_PATH = "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-04-02_20-06-14"
@@ -23,11 +23,37 @@ def run():
 
     # Cellpose params
     cellpose_params = {
-        "model_name": "cyto",
+        "model_name": "cyto3",
         "cell_diameter": 30,
         "min_cell_volume": 95,
         "percentile_range": (10, 99),
         "flow_threshold": 0.0,
+    }
+
+    scheduler_params = {
+        "target_size_mb": 3072,
+        "n_workers": 0,
+        "predict_gradients": {
+            "slices_per_axis": [48, 48, 45],
+            "output_gradients_path": f"{scratch_folder}/gradients.zarr",
+        },
+        "combine_gradients": {
+            "prediction_chunksize": (3, 3, 128, 128, 128),
+            "super_chunksize": (3, 3, 128, 128, 128),
+            "n_workers": 0,
+            "output_combined_gradients_path": f"{scratch_folder}/combined_gradients.zarr",
+            "output_cellprob_path": f"{scratch_folder}/combined_cellprob.zarr",
+        },
+        "flow_centroids": {
+            "output_flows": f"{scratch_folder}/pflows.zarr",
+            "output_hists": f"{scratch_folder}/hists.zarr",
+            "prediction_chunksize": (3, 128, 128, 128),
+        },
+        "generate_masks": {
+            "output_mask": f"{results_folder}/segmentation_mask.zarr",
+            "prediction_chunksize": (3, 128, 128, 128),
+            "super_chunksize": (3, 512, 512, 512),
+        },
     }
 
     # dataset_path = f"s3://{BUCKET_NAME}/{IMAGE_PATH}/{TILE_NAME}"
@@ -44,6 +70,7 @@ def run():
         scratch_folder=scratch_folder,
         global_normalization=True,
         cellpose_params=cellpose_params,
+        scheduler_params=scheduler_params,
     )
 
 

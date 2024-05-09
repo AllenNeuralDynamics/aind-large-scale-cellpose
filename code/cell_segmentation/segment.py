@@ -19,6 +19,7 @@ def segment(
     data_folder: PathLike,
     scratch_folder: PathLike,
     cellpose_params: Dict,
+    scheduler_params: Dict,
     global_normalization: Optional[bool] = True,
 ):
     """
@@ -48,6 +49,11 @@ def segment(
     cellpose_params: Dict
         Cellpose parameters
 
+    scheduler_params: Dict
+        Scheduler params. Setting these parameters
+        correctly will allows proper segmentation and
+        faster processing times.
+
     global_normalization: Optional[bool]
         True if we want to compute the normalization
         based on the whole dataset. Default: True
@@ -62,8 +68,8 @@ def segment(
 
         # Data loader params
         super_chunksize = None
-        target_size_mb = 3072  # None
-        n_workers = 0  # 16
+        target_size_mb = scheduler_params["target_size_mb"]
+        n_workers = scheduler_params["n_workers"]
         batch_size = 1
 
         # Cellpose parameters
@@ -73,9 +79,6 @@ def segment(
         percentile_range = cellpose_params["percentile_range"]
         flow_threshold = cellpose_params["flow_threshold"]
 
-        # output gradients
-        output_gradients_path = f"{results_folder}/gradients.zarr"
-
         # channels for segmentation, we assume background channel is in 0, nuclei 1, ...
         cell_channels = (
             [0, 0]
@@ -84,7 +87,11 @@ def segment(
         )
 
         # Large-scale prediction of gradients
-        slices_per_axis = [48, 48, 45]
+        slices_per_axis = scheduler_params["predict_gradients"]["slices_per_axis"]
+        output_gradients_path = scheduler_params["predict_gradients"][
+            "output_gradients_path"
+        ]
+
         dataset_shape = predict_gradients(
             dataset_paths=dataset_paths,
             multiscale=multiscale,
@@ -104,35 +111,52 @@ def segment(
             percentile_range=percentile_range,
         )
 
-        # output combined gradients path and cell probabilities
-        output_combined_gradients_path = f"{results_folder}/combined_gradients.zarr"
-        output_cellprob_path = f"{results_folder}/combined_cellprob.zarr"
-
         # Large-scale combination of predicted gradients
+        prediction_chunksize = scheduler_params["combine_gradients"][
+            "prediction_chunksize"
+        ]
+        super_chunksize = scheduler_params["combine_gradients"]["super_chunksize"]
+        n_workers = scheduler_params["combine_gradients"]["n_workers"]  # 0
+
+        # output combined gradients path and cell probabilities
+        output_combined_gradients_path = scheduler_params["combine_gradients"][
+            "output_combined_gradients_path"
+        ]
+        output_cellprob_path = scheduler_params["combine_gradients"][
+            "output_cellprob_path"
+        ]
+
         combine_gradients(
             dataset_path=output_gradients_path,
             multiscale=".",
             output_combined_gradients_path=output_combined_gradients_path,
             output_cellprob_path=output_cellprob_path,
-            prediction_chunksize=(3, 3, 128, 128, 128),
-            super_chunksize=(3, 3, 128, 128, 128),
+            prediction_chunksize=prediction_chunksize,
+            super_chunksize=super_chunksize,
             target_size_mb=None,
-            n_workers=0,
+            n_workers=n_workers,
             batch_size=1,
             results_folder=results_folder,
         )
 
+        # Output paths
+        output_combined_pflows = scheduler_params["flow_centroids"]["output_flows"]
+        output_combined_hists = scheduler_params["flow_centroids"]["output_hists"]
+        prediction_chunksize = scheduler_params["flow_centroids"][
+            "prediction_chunksize"
+        ]
+
         output_combined_pflows = f"{results_folder}/pflows.zarr"
         output_combined_hists = f"{results_folder}/hists.zarr"
 
-        # # Large-scale generation of flows, centroids and hists
+        # Large-scale generation of flows, centroids and hists
         cell_centroids_path = generate_flows_and_centroids(
             dataset_path=output_combined_gradients_path,
             output_pflow_path=output_combined_pflows,
             output_hist_path=output_combined_hists,
             multiscale=".",
-            cell_diameter=cell_diameter//2,  # Used to get the overlapping area
-            prediction_chunksize=(3, 128, 128, 128),
+            axis_overlap=cell_diameter // 2,  # Used to get the overlapping area
+            prediction_chunksize=prediction_chunksize,
             target_size_mb=target_size_mb,
             n_workers=n_workers,
             batch_size=batch_size,
@@ -140,7 +164,12 @@ def segment(
             results_folder=results_folder,
         )
 
-        output_segmentation_mask = f"{results_folder}/segmentation_mask.zarr"
+        # Output mask
+        output_segmentation_mask = scheduler_params["generate_masks"]["output_mask"]
+        prediction_chunksize = scheduler_params["generate_masks"][
+            "prediction_chunksize"
+        ]
+        super_chunksize = scheduler_params["generate_masks"]["super_chunksize"]
 
         # Large-scale segmentation mask generation
         generate_masks(
@@ -150,12 +179,12 @@ def segment(
             cell_centroids_path=cell_centroids_path,
             output_seg_mask_path=output_segmentation_mask,
             original_dataset_shape=dataset_shape,
-            cell_diameter=cell_diameter//2,  # Used to get the overlapping area
-            prediction_chunksize=(3, 128, 128, 128),
+            axis_overlap=cell_diameter // 2,  # Used to get the overlapping area
+            prediction_chunksize=prediction_chunksize,
             target_size_mb=None,
             n_workers=n_workers,
             batch_size=batch_size,
-            super_chunksize=(3, 512, 512, 512),
+            super_chunksize=super_chunksize,
             min_cell_volume=min_cell_volume,
             flow_threshold=flow_threshold,
             results_folder=results_folder,
