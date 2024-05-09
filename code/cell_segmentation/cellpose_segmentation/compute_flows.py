@@ -281,7 +281,7 @@ def generate_flows_and_centroids(
     PathLike:
         Path where the global cell centroids where generated.
     """
-    axis_overlap = np.ceil(axis_overlap)
+    axis_overlap = np.ceil(axis_overlap).astype(np.uint16)
 
     predictions_folder = f"{results_folder}/flow_results"
     # local_seeds_folder = f"{predictions_folder}/seeds/local_overlap_overlap_unpadded"

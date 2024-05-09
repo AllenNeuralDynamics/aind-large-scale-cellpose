@@ -932,7 +932,7 @@ def predict_gradients(
             concat_axis=-4,  # Concatenation axis
         )
         logger.info(
-            "Combined background and nuclear channel: ", lazy_data, lazy_data.dtype
+            f"Combined background and nuclear channel: {lazy_data} {lazy_data.dtype}",
         )
 
     combined_percentiles = None
@@ -948,7 +948,7 @@ def predict_gradients(
             threads_per_worker=1,
             combine_method="median",
         )
-        logger.info("Estimated global percentiles: ", combined_percentiles)
+        logger.info(f"Estimated global percentiles: {combined_percentiles}")
         np.save(f"{results_folder}/combined_percentiles.npy", combined_percentiles)
         np.save(f"{results_folder}/chunked_percentiles.npy", chunked_percentiles)
 
@@ -1019,7 +1019,6 @@ def predict_gradients(
             global_normalization=global_normalization,
             model_name=model_name,
             cell_diameter=cell_diameter,
-            results_folder=results_folder,
             cell_channels=cell_channels,
             chn_percentiles=combined_percentiles,
             logger=logger,

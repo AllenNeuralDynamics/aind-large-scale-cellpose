@@ -146,10 +146,10 @@ def segment(
             "prediction_chunksize"
         ]
 
-        # output_combined_pflows = f"{results_folder}/pflows.zarr"
-        # output_combined_hists = f"{results_folder}/hists.zarr"
+        output_combined_pflows = f"{results_folder}/pflows.zarr"
+        output_combined_hists = f"{results_folder}/hists.zarr"
 
-        # # Large-scale generation of flows, centroids and hists
+        # Large-scale generation of flows, centroids and hists
         cell_centroids_path = generate_flows_and_centroids(
             dataset_path=output_combined_gradients_path,
             output_pflow_path=output_combined_pflows,

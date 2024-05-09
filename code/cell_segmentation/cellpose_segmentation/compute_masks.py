@@ -670,7 +670,7 @@ def generate_masks(
         it is being ignored, it needs the dp_masked data.
 
     """
-    axis_overlap = np.ceil(axis_overlap)
+    axis_overlap = np.ceil(axis_overlap).astype(np.uint16)
 
     global_seeds = None
     output_seg_dtype = None

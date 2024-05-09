@@ -10,7 +10,7 @@ def run():
     # Code ocean folders
     results_folder = os.path.abspath("../results")
     data_folder = os.path.abspath("../data")
-    scratch_folder = os.path.abspath("../data")
+    scratch_folder = os.path.abspath("../scratch")
 
     # Dataset to process
     IMAGE_PATH = "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-04-02_20-06-14"
@@ -23,7 +23,7 @@ def run():
 
     # Cellpose params
     cellpose_params = {
-        "model_name": "cyto",
+        "model_name": "cyto3",
         "cell_diameter": 30,
         "min_cell_volume": 95,
         "percentile_range": (10, 99),
