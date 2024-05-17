@@ -66,7 +66,6 @@ def run():
         dataset_paths=dataset_paths,
         multiscale=multiscale,
         results_folder=results_folder,
-        data_folder=data_folder,
         scratch_folder=scratch_folder,
         global_normalization=True,
         cellpose_params=cellpose_params,
