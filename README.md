@@ -1,6 +1,6 @@
-# aind-z1-cell-segmentation
+# aind-large-scale-cellpose
 
-Large-scale cell segmentation using cellpose for Z1 data.
+Large-scale cell segmentation using cellpose.
 
 The approach is the following:
 

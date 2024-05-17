@@ -16,11 +16,11 @@ def segment(
     dataset_paths: List[PathLike],
     multiscale: str,
     results_folder: PathLike,
-    data_folder: PathLike,
     scratch_folder: PathLike,
     cellpose_params: Dict,
     scheduler_params: Dict,
     global_normalization: Optional[bool] = True,
+    code_ocean: Optional[bool] = True,
 ):
     """
     Segments a Z1 dataset.
@@ -38,13 +38,10 @@ def segment(
         Dataset multiscale.
 
     results_folder: PathLike
-        Path of the results folder in Code Ocean.
-
-    data_folder: PathLike
-        Path of the data folder in Code Ocean.
+        Path of the results folder.
 
     scratch_folder: PathLike
-        Path of the scratch folder in Code Ocean.
+        Path of the scratch folder.
 
     cellpose_params: Dict
         Cellpose parameters
@@ -57,6 +54,10 @@ def segment(
     global_normalization: Optional[bool]
         True if we want to compute the normalization
         based on the whole dataset. Default: True
+
+    code_ocean: Optional[bool]
+        If the instance is running in a code ocean environment.
+
     """
     len_datasets = len(dataset_paths)
 
@@ -81,16 +82,12 @@ def segment(
 
         # channels for segmentation, we assume background channel is in 0, nuclei 1, ...
         cell_channels = (
-            [0, 0]
-            if len(dataset_paths) == 1
-            else [i for i in range(len(dataset_paths))]
+            [0, 0] if len(dataset_paths) == 1 else [i for i in range(len(dataset_paths))]
         )
 
         # Large-scale prediction of gradients
         slices_per_axis = scheduler_params["predict_gradients"]["slices_per_axis"]
-        output_gradients_path = scheduler_params["predict_gradients"][
-            "output_gradients_path"
-        ]
+        output_gradients_path = scheduler_params["predict_gradients"]["output_gradients_path"]
 
         dataset_shape = predict_gradients(
             dataset_paths=dataset_paths,
@@ -109,12 +106,11 @@ def segment(
             cell_channels=cell_channels,
             min_cell_volume=min_cell_volume,
             percentile_range=percentile_range,
+            code_ocean=code_ocean,
         )
 
         # Large-scale combination of predicted gradients
-        prediction_chunksize = scheduler_params["combine_gradients"][
-            "prediction_chunksize"
-        ]
+        prediction_chunksize = scheduler_params["combine_gradients"]["prediction_chunksize"]
         super_chunksize = scheduler_params["combine_gradients"]["super_chunksize"]
         n_workers = scheduler_params["combine_gradients"]["n_workers"]  # 0
 
@@ -122,9 +118,7 @@ def segment(
         output_combined_gradients_path = scheduler_params["combine_gradients"][
             "output_combined_gradients_path"
         ]
-        output_cellprob_path = scheduler_params["combine_gradients"][
-            "output_cellprob_path"
-        ]
+        output_cellprob_path = scheduler_params["combine_gradients"]["output_cellprob_path"]
 
         combine_gradients(
             dataset_path=output_gradients_path,
@@ -142,9 +136,7 @@ def segment(
         # Output paths
         output_combined_pflows = scheduler_params["flow_centroids"]["output_flows"]
         output_combined_hists = scheduler_params["flow_centroids"]["output_hists"]
-        prediction_chunksize = scheduler_params["flow_centroids"][
-            "prediction_chunksize"
-        ]
+        prediction_chunksize = scheduler_params["flow_centroids"]["prediction_chunksize"]
 
         output_combined_pflows = f"{results_folder}/pflows.zarr"
         output_combined_hists = f"{results_folder}/hists.zarr"
@@ -166,9 +158,7 @@ def segment(
 
         # Output mask
         output_segmentation_mask = scheduler_params["generate_masks"]["output_mask"]
-        prediction_chunksize = scheduler_params["generate_masks"][
-            "prediction_chunksize"
-        ]
+        prediction_chunksize = scheduler_params["generate_masks"]["prediction_chunksize"]
         super_chunksize = scheduler_params["generate_masks"]["super_chunksize"]
 
         # Large-scale segmentation mask generation

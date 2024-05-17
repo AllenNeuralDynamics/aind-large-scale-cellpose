@@ -15,8 +15,7 @@ import psutil
 import zarr
 from aind_large_scale_prediction._shared.types import ArrayLike, PathLike
 from aind_large_scale_prediction.generator.dataset import create_data_loader
-from aind_large_scale_prediction.generator.utils import (
-    recover_global_position, unpad_global_coords)
+from aind_large_scale_prediction.generator.utils import recover_global_position, unpad_global_coords
 from aind_large_scale_prediction.io import ImageReaderFactory
 from cellpose import core
 from cellpose.dynamics import follow_flows
@@ -69,9 +68,7 @@ def computing_overlapping_hist_and_seed_finding(
     # Flatten p and compute edges
     p_flatten = p.astype("int32").reshape(p.shape[0], -1)
     shape0 = p.shape[1:]
-    edges = [
-        np.arange(-0.5 - rpad, shape0[i] + 0.5 + rpad, 1) for i in range(len(shape0))
-    ]
+    edges = [np.arange(-0.5 - rpad, shape0[i] + 0.5 + rpad, 1) for i in range(len(shape0))]
 
     # Compute histogram
     h, _ = np.histogramdd(tuple(p_flatten), bins=edges)
@@ -94,9 +91,7 @@ def computing_overlapping_hist_and_seed_finding(
 
     # Compute pixel coordinates
     pix_local = np.column_stack(seeds_sorted).astype(np.uint32)
-    pix_global = pix_local + np.array(
-        [global_coord.start for global_coord in global_coords]
-    )
+    pix_global = pix_local + np.array([global_coord.start for global_coord in global_coords])
 
     return pix_global, pix_local, h
 
@@ -336,12 +331,8 @@ def generate_flows_and_centroids(
         multiprocessing.set_start_method("spawn", force=True)
 
     # Getting overlap prediction chunksize
-    overlap_prediction_chunksize = (0,) + tuple(
-        [axis_overlap * 2] * len(prediction_chunksize[-3:])
-    )
-    logger.info(
-        f"Overlap size based on cell diameter * 2: {overlap_prediction_chunksize}"
-    )
+    overlap_prediction_chunksize = (0,) + tuple([axis_overlap * 2] * len(prediction_chunksize[-3:]))
+    logger.info(f"Overlap size based on cell diameter * 2: {overlap_prediction_chunksize}")
 
     lazy_data = (
         ImageReaderFactory()
@@ -406,9 +397,7 @@ def generate_flows_and_centroids(
         np.prod(zarr_dataset.prediction_chunksize) * batch_size
     )
     samples_per_iter = n_workers * batch_size
-    logger.info(
-        f"Number of batches: {total_batches} - Samples per iteration: {samples_per_iter}"
-    )
+    logger.info(f"Number of batches: {total_batches} - Samples per iteration: {samples_per_iter}")
 
     logger.info(f"{20*'='} Combining flows and creating histograms {20*'='}")
     start_time = time()
@@ -465,9 +454,7 @@ def generate_flows_and_centroids(
             curr_picked_blocks = 0
             picked_blocks = []
             time_proc_blocks_end = time()
-            logger.info(
-                f"Time processing blocks: {time_proc_blocks_end - time_proc_blocks}"
-            )
+            logger.info(f"Time processing blocks: {time_proc_blocks_end - time_proc_blocks}")
 
     if curr_picked_blocks != 0:
         logger.info(f"Blocks not processed inside of loop: {curr_picked_blocks}")

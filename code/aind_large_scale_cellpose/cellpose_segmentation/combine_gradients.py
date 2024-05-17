@@ -81,9 +81,9 @@ def execute_worker(
     )
 
     # Cell probability above threshold
-    cell_probability = (
-        data[0][-1] + data[1][-1] + data[2][-1] > cellprob_threshold
-    ).astype(np.uint8)
+    cell_probability = (data[0][-1] + data[1][-1] + data[2][-1] > cellprob_threshold).astype(
+        np.uint8
+    )
 
     # Looking at flows within cell areas
     dP_masked = dP * cell_probability
@@ -218,9 +218,7 @@ def combine_gradients(
         0,
         0,
     )
-    logger.info(
-        f"Overlap size based on cell diameter * 2: {overlap_prediction_chunksize}"
-    )
+    logger.info(f"Overlap size based on cell diameter * 2: {overlap_prediction_chunksize}")
 
     lazy_data = (
         ImageReaderFactory()
@@ -270,18 +268,14 @@ def combine_gradients(
     logger.info(
         f"Combined gradients: {output_combined_gradients} - chunks: {output_combined_gradients.chunks}"  # noqa: E501
     )
-    logger.info(
-        f"Cell probabilities path: {output_cellprob} - chunks: {output_cellprob.chunks}"
-    )
+    logger.info(f"Cell probabilities path: {output_cellprob} - chunks: {output_cellprob.chunks}")
 
     # Estimating total batches
     total_batches = np.prod(zarr_dataset.lazy_data.shape) / (
         np.prod(zarr_dataset.prediction_chunksize) * batch_size
     )
     samples_per_iter = n_workers * batch_size
-    logger.info(
-        f"Number of batches: {total_batches} - Samples per iteration: {samples_per_iter}"
-    )
+    logger.info(f"Number of batches: {total_batches} - Samples per iteration: {samples_per_iter}")
 
     logger.info(f"{20*'='} Starting combination of gradients {20*'='}")
     start_time = time()

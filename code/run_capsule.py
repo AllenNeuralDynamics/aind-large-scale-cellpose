@@ -2,7 +2,7 @@
 
 import os
 
-from cell_segmentation.segment import segment
+from aind_large_scale_cellpose.segment import segment
 
 
 def run():
@@ -66,11 +66,11 @@ def run():
         dataset_paths=dataset_paths,
         multiscale=multiscale,
         results_folder=results_folder,
-        data_folder=data_folder,
         scratch_folder=scratch_folder,
         global_normalization=True,
         cellpose_params=cellpose_params,
         scheduler_params=scheduler_params,
+        code_ocean=True,
     )
 
 

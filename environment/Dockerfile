@@ -6,13 +6,10 @@ ARG GIT_ASKPASS
 ARG GIT_ACCESS_TOKEN
 COPY git-askpass /
 
-ARG new_pred_version="1.1.0"
-
 RUN pip install -U --no-cache-dir \
-    git+https://github.com/AllenNeuralDynamics/aind-large-scale-prediction.git \
+    aind-large-scale-prediction==1.0.0 \
     scikit-image==0.22.0 \
-    matplotlib \
-    dask-image \
+    matplotlib==3.9.0 \
     scipy==1.11.3 \
     cellpose==3.0.5 \
-    numba
+    numba==0.59.1

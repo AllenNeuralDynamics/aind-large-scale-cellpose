@@ -9,8 +9,7 @@ import dask.array as da
 import numpy as np
 from aind_large_scale_prediction._shared.types import ArrayLike
 from aind_large_scale_prediction.generator.utils import concatenate_lazy_data
-from aind_large_scale_prediction.generator.zarr_slice_generator import \
-    BlockedZarrArrayIterator
+from aind_large_scale_prediction.generator.zarr_slice_generator import BlockedZarrArrayIterator
 from aind_large_scale_prediction.io import extract_data
 from dask import config as da_cfg
 from distributed import Client, LocalCluster
@@ -72,9 +71,7 @@ def get_channel_percentiles(
         Dictionary with the computed percentiles.
     """
     # Iterate through the input array in steps equal to the block shape dimensions
-    slices_to_process = list(
-        BlockedZarrArrayIterator.gen_slices(array.shape, block_shape)
-    )
+    slices_to_process = list(BlockedZarrArrayIterator.gen_slices(array.shape, block_shape))
 
     percentiles = {}
 
@@ -206,7 +203,10 @@ def combine_percentiles(percentiles: Dict, method: Optional[str] = "min_max") ->
         channel_percentiles_cmb = None
         if method == "min_max":
             channel_percentiles_cmb = np.array(
-                [np.min(channel_percentiles[0]), np.max(channel_percentiles[1])]
+                [
+                    np.min(channel_percentiles[0]),
+                    np.max(channel_percentiles[1]),
+                ]
             )
 
         elif method == "median":
@@ -214,9 +214,7 @@ def combine_percentiles(percentiles: Dict, method: Optional[str] = "min_max") ->
 
         combined_percentiles.append(list(channel_percentiles_cmb))
 
-        print(
-            f"Channel {chn_idx}: {channel_percentiles} - cmb: {channel_percentiles_cmb}"
-        )
+        print(f"Channel {chn_idx}: {channel_percentiles} - cmb: {channel_percentiles_cmb}")
 
     return combined_percentiles
 
@@ -282,9 +280,7 @@ def compute_percentiles(
         threads_per_worker=threads_per_worker,
     )
 
-    combined_percentiles = combine_percentiles(
-        percentiles=percentiles, method=combine_method
-    )
+    combined_percentiles = combine_percentiles(percentiles=percentiles, method=combine_method)
 
     return combined_percentiles, percentiles
 
