@@ -679,6 +679,7 @@ def generate_masks(
 
         output_seg_dtype = np.uint32  # get_output_seg_data_type(n_cells=n_ids.shape[0])
         global_seeds = np.vstack((global_seeds.T, n_ids)).T
+        np.save(f"{results_folder}/cell_centroids.npy", global_seeds)
 
     else:
         raise ValueError("Please, provide the global seeds")

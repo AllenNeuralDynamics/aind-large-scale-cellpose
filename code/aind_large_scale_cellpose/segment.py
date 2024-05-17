@@ -16,7 +16,6 @@ def segment(
     dataset_paths: List[PathLike],
     multiscale: str,
     results_folder: PathLike,
-    data_folder: PathLike,
     scratch_folder: PathLike,
     cellpose_params: Dict,
     scheduler_params: Dict,
@@ -38,13 +37,10 @@ def segment(
         Dataset multiscale.
 
     results_folder: PathLike
-        Path of the results folder in Code Ocean.
-
-    data_folder: PathLike
-        Path of the data folder in Code Ocean.
+        Path of the results folder.
 
     scratch_folder: PathLike
-        Path of the scratch folder in Code Ocean.
+        Path of the scratch folder.
 
     cellpose_params: Dict
         Cellpose parameters
