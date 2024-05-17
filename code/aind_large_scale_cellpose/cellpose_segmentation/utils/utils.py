@@ -337,7 +337,7 @@ def get_code_ocean_cpu_limit():
     return psutil.cpu_count(logical=False) if container_cpus < 1 else container_cpus
 
 
-def print_system_information(logger: logging.Logger):
+def print_system_information(logger: logging.Logger, code_ocean: Optional[bool] = False):
     """
     Prints system information
 
@@ -345,16 +345,21 @@ def print_system_information(logger: logging.Logger):
     ----------
     logger: logging.Logger
         Logger object
+
+    code_ocean: Optional[bool]
+        If the instance is within a Code Ocean environment.
     """
-    co_memory = int(os.environ.get("CO_MEMORY"))
-    # System info
     sep = "=" * 20
-    logger.info(f"{sep} Code Ocean Information {sep}")
-    logger.info(f"Code Ocean assigned cores: {get_code_ocean_cpu_limit()}")
-    logger.info(f"Code Ocean assigned memory: {get_size(co_memory)}")
-    logger.info(f"Computation ID: {os.environ.get('CO_COMPUTATION_ID')}")
-    logger.info(f"Capsule ID: {os.environ.get('CO_CAPSULE_ID')}")
-    logger.info(f"Is pipeline execution?: {bool(os.environ.get('AWS_BATCH_JOB_ID'))}")
+
+    if code_ocean:
+        co_memory = int(os.environ.get("CO_MEMORY"))
+        # System info
+        logger.info(f"{sep} Code Ocean Information {sep}")
+        logger.info(f"Code Ocean assigned cores: {get_code_ocean_cpu_limit()}")
+        logger.info(f"Code Ocean assigned memory: {get_size(co_memory)}")
+        logger.info(f"Computation ID: {os.environ.get('CO_COMPUTATION_ID')}")
+        logger.info(f"Capsule ID: {os.environ.get('CO_CAPSULE_ID')}")
+        logger.info(f"Is pipeline execution?: {os.environ.get('AWS_BATCH_JOB_ID')}")
 
     logger.info(f"{sep} System Information {sep}")
     uname = platform.uname()

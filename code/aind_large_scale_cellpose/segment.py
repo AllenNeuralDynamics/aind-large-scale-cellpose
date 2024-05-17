@@ -20,6 +20,7 @@ def segment(
     cellpose_params: Dict,
     scheduler_params: Dict,
     global_normalization: Optional[bool] = True,
+    code_ocean: Optional[bool] = True,
 ):
     """
     Segments a Z1 dataset.
@@ -53,6 +54,10 @@ def segment(
     global_normalization: Optional[bool]
         True if we want to compute the normalization
         based on the whole dataset. Default: True
+
+    code_ocean: Optional[bool]
+        If the instance is running in a code ocean environment.
+
     """
     len_datasets = len(dataset_paths)
 
@@ -101,6 +106,7 @@ def segment(
             cell_channels=cell_channels,
             min_cell_volume=min_cell_volume,
             percentile_range=percentile_range,
+            code_ocean=code_ocean,
         )
 
         # Large-scale combination of predicted gradients

@@ -71,6 +71,7 @@ def run():
         global_normalization=True,
         cellpose_params=cellpose_params,
         scheduler_params=scheduler_params,
+        code_ocean=True,
     )
 
 

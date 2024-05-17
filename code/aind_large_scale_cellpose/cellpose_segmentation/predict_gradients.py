@@ -540,6 +540,7 @@ def large_scale_cellpose_gradients_per_axis(
     cell_diameter: Optional[int] = 15,
     cell_channels: Optional[List[int]] = [0, 0],
     chn_percentiles: Optional[Dict] = None,
+    code_ocean: Optional[bool] = False,
 ):
     """
     Large-scale cellpose prediction of gradients.
@@ -604,6 +605,9 @@ def large_scale_cellpose_gradients_per_axis(
     chn_percentiles: Optional[Dict]
         Dataset percentiles
 
+    code_ocean: Optional[bool]
+        If the instance is within a code ocean environment.
+
     """
 
     co_cpus = int(utils.get_code_ocean_cpu_limit())
@@ -614,7 +618,7 @@ def large_scale_cellpose_gradients_per_axis(
     logger.info(f"{20*'='} Large-Scale Cellpose - Gradient Prediction in Axis {axis} {20*'='}")
 
     if axis == 0:
-        utils.print_system_information(logger)
+        utils.print_system_information(logger, code_ocean=code_ocean)
 
     logger.info(f"Processing dataset of shape {lazy_data.shape}")
 
@@ -812,6 +816,7 @@ def predict_gradients(
     cell_channels: Optional[List[int]] = [0, 0],
     min_cell_volume: Optional[int] = 95,
     percentile_range: Optional[Tuple[float, float]] = (10, 99),
+    code_ocean: Optional[bool] = False,
 ) -> Tuple[int]:
     """
     Large-scale cellpose prediction of gradients.
@@ -882,6 +887,9 @@ def predict_gradients(
         List of channels that we are going to use for prediction.
         If background channel is on axis 0 and nuclear in channel 1,
         then cell_channels=[0, 1]. Default: [0, 0]
+
+    code_ocean: Optional[bool]
+        If the instance is running in a code ocean environment.
 
     Returns
     -------
@@ -1034,6 +1042,7 @@ def predict_gradients(
             cell_channels=cell_channels,
             chn_percentiles=combined_percentiles,
             logger=logger,
+            code_ocean=code_ocean,
         )
 
     # Getting tracked resources and plotting image
