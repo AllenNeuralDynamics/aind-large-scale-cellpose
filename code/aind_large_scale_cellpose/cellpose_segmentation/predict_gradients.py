@@ -14,7 +14,9 @@ import psutil
 import zarr
 from aind_large_scale_prediction.generator.dataset import create_data_loader
 from aind_large_scale_prediction.generator.utils import (
-    concatenate_lazy_data, recover_global_position)
+    concatenate_lazy_data,
+    recover_global_position,
+)
 from aind_large_scale_prediction.io import ImageReaderFactory
 from cellpose import utils as cellpose_utils
 from cellpose.core import use_gpu  # , run_net
@@ -33,7 +35,13 @@ tqdm_out = cellpose_utils.TqdmToLogger(core_logger, level=logging.INFO)
 
 
 def run_net(
-    net, imgs, batch_size=8, augment=False, tile=True, tile_overlap=0.1, bsize=224
+    net,
+    imgs,
+    batch_size=8,
+    augment=False,
+    tile=True,
+    tile_overlap=0.1,
+    bsize=224,
 ):
     """
     Run network on image or stack of images.
@@ -216,9 +224,9 @@ def _run_tiled(net, imgi, batch_size=8, augment=False, bsize=224, tile_overlap=0
                         augment=augment,
                         tile_overlap=tile_overlap,
                     )
-                    IMGa[i * ntiles : (i + 1) * ntiles] = np.reshape(  # noqa: E203
+                    IMGa[i * ntiles : (i + 1) * ntiles] = np.reshape(
                         IMG, (ny * nx, nchan, ly, lx)
-                    )
+                    )  # noqa: E203
                 ya, stylea = _forward(net, IMGa)
                 for i in range(min(Lz - k * nimgs, nimgs)):
                     y = ya[i * ntiles : (i + 1) * ntiles]  # noqa: E203
@@ -229,9 +237,7 @@ def _run_tiled(net, imgi, batch_size=8, augment=False, bsize=224, tile_overlap=0
                     yfi = transforms.average_tiles(y, ysub, xsub, Ly, Lx)
                     yfi = yfi[:, : imgi.shape[2], : imgi.shape[3]]  # noqa: E203
                     yf[k * nimgs + i] = yfi
-                    stylei = stylea[i * ntiles : (i + 1) * ntiles].sum(  # noqa: E203
-                        axis=0
-                    )
+                    stylei = stylea[i * ntiles : (i + 1) * ntiles].sum(axis=0)  # noqa: E203
                     stylei /= (stylei**2).sum() ** 0.5
                     styles.append(stylei)
         return yf, np.array(styles)
@@ -244,13 +250,14 @@ def _run_tiled(net, imgi, batch_size=8, augment=False, bsize=224, tile_overlap=0
         niter = int(np.ceil(IMG.shape[0] / batch_size))
         y = np.zeros((IMG.shape[0], nout, ly, lx))
         for k in range(niter):
-            irange = slice(
-                batch_size * k, min(IMG.shape[0], batch_size * k + batch_size)
-            )
+            irange = slice(batch_size * k, min(IMG.shape[0], batch_size * k + batch_size))
             # print(f"[{k} - {irange}] Predicting: {IMG[irange].shape}")
             y0, style = _forward(net, IMG[irange])
             y[irange] = y0.reshape(
-                irange.stop - irange.start, y0.shape[-3], y0.shape[-2], y0.shape[-1]
+                irange.stop - irange.start,
+                y0.shape[-3],
+                y0.shape[-2],
+                y0.shape[-1],
             )
             # check size models!
             if k == 0:
@@ -333,7 +340,11 @@ def run_2D_cellpose(
     """
     sstr = ["XY", "ZX", "ZY"]
     if anisotropy is not None:
-        rescaling = [[rsz, rsz], [rsz * anisotropy, rsz], [rsz * anisotropy, rsz]]
+        rescaling = [
+            [rsz, rsz],
+            [rsz * anisotropy, rsz],
+            [rsz * anisotropy, rsz],
+        ]
     else:
         rescaling = [rsz] * 3
 
@@ -488,7 +499,9 @@ def run_cellpose_net(
     elif channel_percentiles is not None:
         # global normalization using global percentiles
         x = percentile_normalization(
-            data=x, chn_percentiles=channel_percentiles, channels=np.unique(channels)
+            data=x,
+            chn_percentiles=channel_percentiles,
+            channels=np.unique(channels),
         )
 
     else:
@@ -598,9 +611,7 @@ def large_scale_cellpose_gradients_per_axis(
     if n_workers > co_cpus:
         raise ValueError(f"Provided workers {n_workers} > current workers {co_cpus}")
 
-    logger.info(
-        f"{20*'='} Large-Scale Cellpose - Gradient Prediction in Axis {axis} {20*'='}"
-    )
+    logger.info(f"{20*'='} Large-Scale Cellpose - Gradient Prediction in Axis {axis} {20*'='}")
 
     if axis == 0:
         utils.print_system_information(logger)
@@ -608,9 +619,7 @@ def large_scale_cellpose_gradients_per_axis(
     logger.info(f"Processing dataset of shape {lazy_data.shape}")
 
     # Creating zarr data loader
-    logger.info(
-        f"Creating chunked data loader for {lazy_data} - chunks {lazy_data.chunksize}"
-    )
+    logger.info(f"Creating chunked data loader for {lazy_data} - chunks {lazy_data.chunksize}")
     shm_memory = psutil.virtual_memory()
     logger.info(f"Shared memory information: {shm_memory}")
 
@@ -634,13 +643,9 @@ def large_scale_cellpose_gradients_per_axis(
     # Order ZYX
     if axis:
         # Y and X have the same resolution for Z1 data
-        anisotropy = (
-            image_metadata["axes"]["z"]["scale"] / image_metadata["axes"]["y"]["scale"]
-        )
+        anisotropy = image_metadata["axes"]["z"]["scale"] / image_metadata["axes"]["y"]["scale"]
 
-    logger.info(
-        f"Image metadata: {image_metadata} - anisotropy: {anisotropy} - axis: {axis}"
-    )
+    logger.info(f"Image metadata: {image_metadata} - anisotropy: {anisotropy} - axis: {axis}")
 
     # Creating zarr data loader
     zarr_data_loader, zarr_dataset = create_data_loader(
@@ -701,18 +706,14 @@ def large_scale_cellpose_gradients_per_axis(
 
     # Getting current GPU device and inizialing cellpose network
     sdevice, gpu = assign_device(use_torch=use_GPU, gpu=use_GPU)
-    model = CellposeModel(
-        gpu=gpu, model_type=model_name, diam_mean=cell_diameter, device=sdevice
-    )
+    model = CellposeModel(gpu=gpu, model_type=model_name, diam_mean=cell_diameter, device=sdevice)
 
     # Estimating total batches
     total_batches = np.prod(zarr_dataset.lazy_data.shape) / (
         np.prod(zarr_dataset.prediction_chunksize) * batch_size
     )
     samples_per_iter = n_workers * batch_size
-    logger.info(
-        f"Number of batches: {total_batches} - Samples per iteration: {samples_per_iter}"
-    )
+    logger.info(f"Number of batches: {total_batches} - Samples per iteration: {samples_per_iter}")
 
     logger.info(
         f"{20*'='} Starting estimation of cellpose combined gradients - Axis {axis} - Channels {cell_channels} {20*'='}"  # noqa: E501
@@ -726,9 +727,7 @@ def large_scale_cellpose_gradients_per_axis(
         data = sample.batch_tensor.numpy()[0, ...]
 
         if data.shape != prediction_chunksize:
-            logger.info(
-                f"Non-uniform block of data... {data.shape} - {prediction_chunksize}"
-            )
+            logger.info(f"Non-uniform block of data... {data.shape} - {prediction_chunksize}")
             continue
 
         # Recover global position of internal chunk
@@ -741,7 +740,10 @@ def large_scale_cellpose_gradients_per_axis(
             internal_slices=sample.batch_internal_slice,
         )
 
-        global_coord_pos = (slice(axis, axis + 1), slice(0, 3)) + global_coord_pos[-3:]
+        global_coord_pos = (
+            slice(axis, axis + 1),
+            slice(0, 3),
+        ) + global_coord_pos[-3:]
 
         # Estimating plane gradient
         y = run_cellpose_net(
@@ -962,9 +964,7 @@ def predict_gradients(
         .metadata()
     )
 
-    image_metadata = utils.parse_zarr_metadata(
-        metadata=image_metadata, multiscale=multiscale
-    )
+    image_metadata = utils.parse_zarr_metadata(metadata=image_metadata, multiscale=multiscale)
 
     # axes_names = ["XY", "ZX", "ZY"]
 
@@ -978,7 +978,11 @@ def predict_gradients(
 
         # Setting prediction chunksize to entire planes using the number of slices per axis
         if axis == 0:
-            prediction_chunksize = (slice_per_axis, image_shape[-2], image_shape[-1])
+            prediction_chunksize = (
+                slice_per_axis,
+                image_shape[-2],
+                image_shape[-1],
+            )
             super_chunksize = (
                 slice_per_axis,
                 image_shape[-2],
@@ -986,7 +990,11 @@ def predict_gradients(
             )
 
         elif axis == 1:
-            prediction_chunksize = (image_shape[-3], slice_per_axis, image_shape[-1])
+            prediction_chunksize = (
+                image_shape[-3],
+                slice_per_axis,
+                image_shape[-1],
+            )
             super_chunksize = (
                 image_shape[-3],
                 slice_per_axis,
@@ -994,7 +1002,11 @@ def predict_gradients(
             )
 
         elif axis == 2:
-            prediction_chunksize = (image_shape[-3], image_shape[-2], slice_per_axis)
+            prediction_chunksize = (
+                image_shape[-3],
+                image_shape[-2],
+                slice_per_axis,
+            )
             super_chunksize = (
                 image_shape[-3],
                 image_shape[-2],

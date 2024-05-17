@@ -2,7 +2,7 @@
 
 import os
 
-from cell_segmentation.segment import segment
+from aind_large_scale_cellpose.segment import segment
 
 
 def run():

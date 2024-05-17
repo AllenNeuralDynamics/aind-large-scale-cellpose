@@ -18,8 +18,7 @@ import numpy as np
 import psutil
 import zarr
 from aind_large_scale_prediction.generator.dataset import create_data_loader
-from aind_large_scale_prediction.generator.utils import (
-    recover_global_position, unpad_global_coords)
+from aind_large_scale_prediction.generator.utils import recover_global_position, unpad_global_coords
 from aind_large_scale_prediction.io import ImageReaderFactory
 from cellpose import metrics
 from scipy.ndimage import binary_fill_holes, grey_dilation, map_coordinates
@@ -100,9 +99,7 @@ def create_initial_mask(
 
                 # Expand each voxel 3 voxels around it
                 for i, e in enumerate(expand):
-                    epix = (
-                        e[:, np.newaxis] + np.expand_dims(cell_centroids[k][i], 0) - 1
-                    )
+                    epix = e[:, np.newaxis] + np.expand_dims(cell_centroids[k][i], 0) - 1
                     # Flattenning points around a point inside ZYX
                     epix = epix.flatten()
 
@@ -155,7 +152,10 @@ def create_initial_mask(
 
 
 def remove_bad_flow_masks(
-    masks: ArrayLike, flows: ArrayLike, threshold: Optional[float] = 0.4, device=None
+    masks: ArrayLike,
+    flows: ArrayLike,
+    threshold: Optional[float] = 0.4,
+    device=None,
 ) -> ArrayLike:
     """
     Removes bad flows within the generated initial mask.
@@ -219,9 +219,7 @@ def fill_holes_and_remove_small_masks(
     """
 
     if masks.ndim > 3 or masks.ndim < 2:
-        raise ValueError(
-            "masks_to_outlines takes 2D or 3D array, not %dD array" % masks.ndim
-        )
+        raise ValueError("masks_to_outlines takes 2D or 3D array, not %dD array" % masks.ndim)
 
     masks_properties = regionprops(masks)
 
@@ -388,9 +386,7 @@ def extract_global_to_local(
     ]
 
     # Mapping to the local coordinate system of the chunk
-    picked_global_ids_with_cells[..., :3] = (
-        picked_global_ids_with_cells[..., :3] - start_pos - pad
-    )
+    picked_global_ids_with_cells[..., :3] = picked_global_ids_with_cells[..., :3] - start_pos - pad
 
     # Validating seeds are within block boundaries
     picked_global_ids_with_cells = picked_global_ids_with_cells[
@@ -531,9 +527,7 @@ def execute_worker(
         f"Global slices: {global_coord_pos} - Unpadded global slices: {unpadded_global_slice[1:]} - Local slices: {unpadded_local_slice[1:]}"  # noqa: E501
     )
 
-    global_points_path = (
-        f"{cell_centroids_path}/global_seeds_{unpadded_global_slice[1:]}.npy"
-    )
+    global_points_path = f"{cell_centroids_path}/global_seeds_{unpadded_global_slice[1:]}.npy"
 
     # Unpadded block mask zeros if seeds don't exist in that area
     chunked_seg_mask = np.zeros(data.shape[1:], dtype=np.uint32)
@@ -736,12 +730,8 @@ def generate_masks(
         multiprocessing.set_start_method("spawn", force=True)
 
     # Getting overlap prediction chunksize
-    overlap_prediction_chunksize = (0,) + tuple(
-        [axis_overlap * 2] * len(prediction_chunksize[-3:])
-    )
-    logger.info(
-        f"Overlap size based on cell diameter * 2: {overlap_prediction_chunksize}"
-    )
+    overlap_prediction_chunksize = (0,) + tuple([axis_overlap * 2] * len(prediction_chunksize[-3:]))
+    logger.info(f"Overlap size based on cell diameter * 2: {overlap_prediction_chunksize}")
 
     lazy_data = (
         ImageReaderFactory()
@@ -799,18 +789,14 @@ def generate_masks(
 
     hists = zarr.open(hists_path, "r")
 
-    logger.info(
-        f"Creating masks in path: {output_seg_masks} chunks: {output_seg_masks.chunks}"
-    )
+    logger.info(f"Creating masks in path: {output_seg_masks} chunks: {output_seg_masks.chunks}")
 
     # Estimating total batches
     total_batches = np.prod(zarr_dataset.lazy_data.shape) / (
         np.prod(zarr_dataset.prediction_chunksize) * batch_size
     )
     samples_per_iter = n_workers * batch_size
-    logger.info(
-        f"Number of batches: {total_batches} - Samples per iteration: {samples_per_iter}"
-    )
+    logger.info(f"Number of batches: {total_batches} - Samples per iteration: {samples_per_iter}")
 
     logger.info(f"{20*'='} Starting mask generation {20*'='}")
     start_time = time()

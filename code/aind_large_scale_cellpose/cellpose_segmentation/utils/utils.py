@@ -130,12 +130,8 @@ def profile_resources(
             gpu_metrics = get_gpu_metrics()
 
             for curr_idx, vals in gpu_metrics.items():
-                gpu_resources[curr_idx]["gpu_utilization"].append(
-                    vals["gpu_utilization"]
-                )
-                gpu_resources[curr_idx]["memory_utilization"].append(
-                    vals["memory_utilization"]
-                )
+                gpu_resources[curr_idx]["gpu_utilization"].append(vals["gpu_utilization"])
+                gpu_resources[curr_idx]["memory_utilization"].append(vals["memory_utilization"])
 
         time.sleep(monitoring_interval)
 
@@ -373,9 +369,7 @@ def print_system_information(logger: logging.Logger):
     logger.info(f"{sep} Boot Time {sep}")
     boot_time_timestamp = psutil.boot_time()
     bt = datetime.fromtimestamp(boot_time_timestamp)
-    logger.info(
-        f"Boot Time: {bt.year}/{bt.month}/{bt.day} {bt.hour}:{bt.minute}:{bt.second}"
-    )
+    logger.info(f"Boot Time: {bt.year}/{bt.month}/{bt.day} {bt.hour}:{bt.minute}:{bt.second}")
 
     # CPU info
     logger.info(f"{sep} CPU Info {sep}")
