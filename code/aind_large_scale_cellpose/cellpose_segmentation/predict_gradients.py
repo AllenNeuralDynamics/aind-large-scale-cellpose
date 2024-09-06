@@ -6,6 +6,7 @@ are ZY, ZX and XY.
 
 import logging
 import multiprocessing
+from pathlib import Path
 from time import time
 from typing import Callable, Dict, List, Optional, Tuple
 
@@ -547,7 +548,7 @@ def large_scale_cellpose_gradients_per_axis(
     super_chunksize: Optional[Tuple[int, ...]] = None,
     lazy_callback_fn: Optional[Callable[[ArrayLike], ArrayLike]] = None,
     global_normalization: Optional[bool] = True,
-    model_name: Optional[str] = "cyto",
+    model_name: Optional[PathLike] = "cyto",
     cell_diameter: Optional[int] = 15,
     cell_channels: Optional[List[int]] = [0, 0],
     chn_percentiles: Optional[Dict] = None,
@@ -602,8 +603,9 @@ def large_scale_cellpose_gradients_per_axis(
     global_normalization: Optional[bool] = True
         If we want to normalize the data for cellpose.
 
-    model_name: Optional[str] = "cyto"
-        Model name to be used by cellpose
+    model_name: Optional[PathLike] = "cyto"
+        Model name to be used by cellpose. This could also be a path
+        pointing to a pretrained model.
 
     cell_diameter: Optional[int] = 15
         Cell diameter for cellpose
@@ -721,7 +723,17 @@ def large_scale_cellpose_gradients_per_axis(
 
     # Getting current GPU device and inizialing cellpose network
     sdevice, gpu = assign_device(use_torch=use_GPU, gpu=use_GPU)
-    model = CellposeModel(gpu=gpu, model_type=model_name, diam_mean=cell_diameter, device=sdevice)
+
+    # Loading model, could be a pretrained model
+    if Path(model_name).exists():
+        model = CellposeModel(
+            gpu=gpu, pretrained_model=str(model_name), diam_mean=cell_diameter, device=sdevice
+        )
+
+    else:
+        model = CellposeModel(
+            gpu=gpu, model_type=str(model_name), diam_mean=cell_diameter, device=sdevice
+        )
 
     # Estimating total batches
     total_batches = np.prod(zarr_dataset.lazy_data.shape) / (
