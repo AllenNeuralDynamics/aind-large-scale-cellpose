@@ -150,7 +150,7 @@ def segment(
             axis_overlap=cell_diameter // 2,  # Used to get the overlapping area
             prediction_chunksize=prediction_chunksize,
             target_size_mb=target_size_mb,
-            n_workers=n_workers,
+            n_workers=16,#n_workers,
             batch_size=batch_size,
             super_chunksize=None,
             results_folder=results_folder,

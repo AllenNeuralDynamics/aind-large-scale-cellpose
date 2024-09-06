@@ -13,10 +13,11 @@ def run():
     scratch_folder = os.path.abspath("../scratch")
 
     # Dataset to process
-    IMAGE_PATH = "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-04-02_20-06-14"
+    IMAGE_PATH = "HCR_742353_2024-08-10_19-30-00"#"HCR_747809_2024-07-19_12-00-00" #"HCR_732195-ROI2-cell1_2024-06-15_06-00-00"
+    #"HCR_BL6-000_2023-06-1_00-00-00_fused_2024-04-02_20-06-14"
     # "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-02-09_13-28-49"
-    BKG_CHN = "channel_405.zarr"
-    NUCLEI_CHN = "channel_3.zarr"
+    BKG_CHN = "fused/channel_405.zarr"
+    #NUCLEI_CHN = "channel_3.zarr"
 
     # NOTE: Change the cell diameter based on multiscale
     multiscale = "2"
@@ -34,7 +35,7 @@ def run():
         "target_size_mb": 3072,
         "n_workers": 0,
         "predict_gradients": {
-            "slices_per_axis": [48, 48, 45],
+            "slices_per_axis": [20, 20, 20],
             "output_gradients_path": f"{scratch_folder}/gradients.zarr",
         },
         "combine_gradients": {
@@ -58,9 +59,9 @@ def run():
 
     # dataset_path = f"s3://{BUCKET_NAME}/{IMAGE_PATH}/{TILE_NAME}"
     background_channel = f"{data_folder}/{IMAGE_PATH}/{BKG_CHN}"
-    nuclei_channel = f"{data_folder}/{IMAGE_PATH}/{NUCLEI_CHN}"
+    #nuclei_channel = f"{data_folder}/{IMAGE_PATH}/{NUCLEI_CHN}"
 
-    dataset_paths = [background_channel, nuclei_channel]
+    dataset_paths = [background_channel]#, nuclei_channel]
 
     segment(
         dataset_paths=dataset_paths,

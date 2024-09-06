@@ -349,7 +349,7 @@ def generate_flows_and_centroids(
         target_size_mb=target_size_mb,
         prediction_chunksize=prediction_chunksize,
         overlap_prediction_chunksize=overlap_prediction_chunksize,
-        n_workers=n_workers,
+        n_workers=0,
         batch_size=batch_size,
         dtype=np.float32,  # Allowed data type to process with pytorch cuda
         super_chunksize=super_chunksize,
@@ -403,7 +403,7 @@ def generate_flows_and_centroids(
     start_time = time()
 
     # Setting exec workers to CO CPUs
-    exec_n_workers = co_cpus
+    exec_n_workers = n_workers
 
     # Create a pool of processes
     pool = multiprocessing.Pool(processes=exec_n_workers)
