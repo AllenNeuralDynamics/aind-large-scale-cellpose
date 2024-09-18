@@ -13,9 +13,9 @@ def run():
     scratch_folder = os.path.abspath("../scratch")
 
     # Dataset to process
-    IMAGE_PATH = "HCR_742353_2024-08-10_19-30-00"#"HCR_747809_2024-07-19_12-00-00" #"HCR_732195-ROI2-cell1_2024-06-15_06-00-00"
-    #"HCR_BL6-000_2023-06-1_00-00-00_fused_2024-04-02_20-06-14"
-    # "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-02-09_13-28-49"
+    IMAGE_PATH = "HCR_736207-01_2024-08-08_13-00-00"
+    #"HCR_736207.01_2024-07-25_13-00-00"
+    # "HCR_736207-05_2024-08-02_13-00-00"
     BKG_CHN = "fused/channel_405.zarr"
     #NUCLEI_CHN = "channel_3.zarr"
 
@@ -24,7 +24,7 @@ def run():
 
     # Cellpose params
     cellpose_params = {
-        "model_name": "cyto",
+        "model_name": "cyto",#"../data/CP_20240905_144444_LC",
         "cell_diameter": 30,
         "min_cell_volume": 95,
         "percentile_range": (10, 99),

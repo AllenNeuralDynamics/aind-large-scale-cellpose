@@ -44,8 +44,12 @@ def main():
     data_folder = os.path.abspath("../data")
     scratch_folder = os.path.abspath("../scratch")
 
-    folders_to_process = [p.name for p in Path(data_folder).glob("*ROI*")]
+    model_name = Path(data_folder).joinpath("CP_20240905_144444_LC")
+    
+    folders_to_process = [p.name for p in Path(data_folder).glob("HCR_744360-ROI-*")]
 
+    print(f"Folders to process: {folders_to_process}")
+    
     for folder in folders_to_process:
 
         print(f"PROCESSING CELLS OF {folder}")
@@ -67,7 +71,7 @@ def main():
     
         # Cellpose params
         cellpose_params = {
-            "model_name": "cyto",
+            "model_name": str(model_name),
             "cell_diameter": 30,
             "min_cell_volume": 95,
             "percentile_range": (10, 99),

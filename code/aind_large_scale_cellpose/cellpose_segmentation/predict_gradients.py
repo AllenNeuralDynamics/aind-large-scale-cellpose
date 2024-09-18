@@ -723,7 +723,8 @@ def large_scale_cellpose_gradients_per_axis(
 
     # Getting current GPU device and inizialing cellpose network
     sdevice, gpu = assign_device(use_torch=use_GPU, gpu=use_GPU)
-
+    logger.info(f"Loading pretrained model from: {model_name}")
+    
     # Loading model, could be a pretrained model
     if Path(model_name).exists():
         model = CellposeModel(

@@ -79,8 +79,12 @@ def get_channel_percentiles(
 
         block = array[sl]
         block = block[block > min_cell_volume]
-        percentiled_block = da.percentile(block, percentile_range, method="linear")
-        min_max_values = percentiled_block.compute()
+
+        try:
+            percentiled_block = da.percentile(block, percentile_range, method="linear")
+            min_max_values = percentiled_block.compute()
+        except Exception as e:
+            print(f"Problem {e} computing percentiles in area {sl}")
 
         percentiles[str(sl)] = min_max_values
 
