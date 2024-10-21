@@ -10,7 +10,7 @@ from .cellpose_segmentation.combine_gradients import combine_gradients
 from .cellpose_segmentation.compute_flows import generate_flows_and_centroids
 from .cellpose_segmentation.compute_masks import generate_masks
 from .cellpose_segmentation.predict_gradients import predict_gradients
-from .cellpose_segmentation.utils import upscale_mask
+from .cellpose_segmentation.utils import upscale_mask, utils
 
 
 def segment(
@@ -188,12 +188,15 @@ def segment(
         if upsample_masks_levels:
             # Setting dataset_paths[0] since I need the path
             # only to pick the metadata for upsampling
+            co_cpus = int(utils.get_code_ocean_cpu_limit())
+
             upscale_mask(
                 dataset_path=dataset_paths[0],
                 segmentation_mask_path=output_segmentation_mask,
                 output_folder=results_folder,
                 filename="segmentation_mask.zarr",
                 dest_multiscale="0",
+                n_workers=co_cpus,
             )
 
     else:

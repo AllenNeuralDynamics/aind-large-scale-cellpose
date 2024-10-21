@@ -219,7 +219,9 @@ def upscale_mask(
     dataset_path: str,
     segmentation_mask_path: str,
     output_folder: str,
+    filename: Optional[str] = "segmentation_mask.zarr",
     dest_multiscale: Optional[str] = "0",
+    n_workers: Optional[int] = 16,
 ):
     """
     Upscales a segmentation mask
@@ -234,9 +236,13 @@ def upscale_mask(
     output_folder: str
         Path where the upsampled segmentation mask will
         be stored.
+    filename: str
+        Filename for the upsampled segmentation mask
     dest_multiscale: Optional[str]
         Destination multiscale. This is useful to pull
         metadata. Default: "0"
+    n_workers: Optional[int]
+        Optional number of workers for the dask cluster. Default: 16
     """
     output_folder = Path(output_folder)
 
@@ -287,7 +293,7 @@ def upscale_mask(
 
     lazy_mask_data = extract_data(seg_mask_reader.as_dask_array())
 
-    output_filepath = output_folder.joinpath("segmentation_mask.zarr").as_posix()
+    output_filepath = output_folder.joinpath(filename).as_posix()
     output_params = {
         "chunksize": [1, 1, 128, 128, 128],
         "resolution_zyx": resolution_zyx,
@@ -303,4 +309,5 @@ def upscale_mask(
         output_params=output_params,
         upscale_factors_zyx=(1, 4, 4),  # TODO Calculate factors based on metadata
         new_shape=image_lazy_data.shape,
+        n_workers=n_workers,
     )
