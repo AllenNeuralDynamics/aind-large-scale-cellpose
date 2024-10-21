@@ -357,7 +357,7 @@ def run_2D_cellpose(
     print(f"Starting resizing of image transposed: {shape} - {rescaling[img_axis]}")
     rescaled_factors_np = np.array(rescaling[img_axis], dtype=np.float16)
     rescaled_factors_np_eval = rescaled_factors_np[rescaled_factors_np != 1.0]
-    
+
     # Resizing it's needed
     if rescaled_factors_np_eval.shape[0]:
         imgs = transforms.resize_image(imgs, rsz=rescaling[img_axis])
@@ -381,7 +381,7 @@ def run_2D_cellpose(
     # Resizing back
     if rescaled_factors_np_eval.shape[0]:
         y = transforms.resize_image(y, shape[1], shape[2])
-    
+
     y = y.transpose(ipm[img_axis])
 
     if progress is not None:
@@ -724,7 +724,7 @@ def large_scale_cellpose_gradients_per_axis(
     # Getting current GPU device and inizialing cellpose network
     sdevice, gpu = assign_device(use_torch=use_GPU, gpu=use_GPU)
     logger.info(f"Loading pretrained model from: {model_name}")
-    
+
     # Loading model, could be a pretrained model
     if Path(model_name).exists():
         model = CellposeModel(

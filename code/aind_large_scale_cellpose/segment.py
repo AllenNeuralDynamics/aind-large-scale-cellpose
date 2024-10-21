@@ -10,6 +10,7 @@ from .cellpose_segmentation.combine_gradients import combine_gradients
 from .cellpose_segmentation.compute_flows import generate_flows_and_centroids
 from .cellpose_segmentation.compute_masks import generate_masks
 from .cellpose_segmentation.predict_gradients import predict_gradients
+from .cellpose_segmentation.utils import upscale_mask
 
 
 def segment(
@@ -21,6 +22,7 @@ def segment(
     scheduler_params: Dict,
     global_normalization: Optional[bool] = True,
     code_ocean: Optional[bool] = True,
+    upsample_masks_levels: Optional[int] = 0,
 ):
     """
     Segments a Z1 dataset.
@@ -57,6 +59,9 @@ def segment(
 
     code_ocean: Optional[bool]
         If the instance is running in a code ocean environment.
+
+    upsample_masks_levels: Optional[bool]
+        Upsamples the segmentation masks by n levels.
 
     """
     len_datasets = len(dataset_paths)
@@ -150,7 +155,7 @@ def segment(
             axis_overlap=cell_diameter // 2,  # Used to get the overlapping area
             prediction_chunksize=prediction_chunksize,
             target_size_mb=target_size_mb,
-            n_workers=16,#n_workers,
+            n_workers=10,  # n_workers,
             batch_size=batch_size,
             super_chunksize=None,
             results_folder=results_folder,
@@ -179,6 +184,17 @@ def segment(
             flow_threshold=flow_threshold,
             results_folder=results_folder,
         )
+
+        if upsample_masks_levels:
+            # Setting dataset_paths[0] since I need the path
+            # only to pick the metadata for upsampling
+            upscale_mask(
+                dataset_path=dataset_paths[0],
+                segmentation_mask_path=output_segmentation_mask,
+                output_folder=results_folder,
+                filename="segmentation_mask.zarr",
+                dest_multiscale="0",
+            )
 
     else:
         print("Provided paths do not exist!")

@@ -13,10 +13,10 @@ def run():
     scratch_folder = os.path.abspath("../scratch")
 
     # Dataset to process
-    IMAGE_PATH = "HCR_736207-01_2024-08-08_13-00-00"
+    IMAGE_PATH = "HCR_742354_2024-08-30_18-00-00"
     #"HCR_736207.01_2024-07-25_13-00-00"
     # "HCR_736207-05_2024-08-02_13-00-00"
-    BKG_CHN = "fused/channel_405.zarr"
+    BKG_CHN = "fused/channel_488.zarr"
     #NUCLEI_CHN = "channel_3.zarr"
 
     # NOTE: Change the cell diameter based on multiscale
@@ -51,7 +51,7 @@ def run():
             "prediction_chunksize": (3, 128, 128, 128),
         },
         "generate_masks": {
-            "output_mask": f"{results_folder}/segmentation_mask.zarr",
+            "output_mask": f"{results_folder}/segmentation_mask_orig_res.zarr",
             "prediction_chunksize": (3, 128, 128, 128),
             "super_chunksize": (3, 512, 512, 512),
         },
@@ -72,6 +72,7 @@ def run():
         cellpose_params=cellpose_params,
         scheduler_params=scheduler_params,
         code_ocean=True,
+        upsample_masks_levels=1,
     )
 
 
