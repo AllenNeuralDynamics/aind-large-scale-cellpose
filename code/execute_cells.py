@@ -1,12 +1,12 @@
 """ top level run script """
 
 import os
+from pathlib import Path
 
 from aind_large_scale_cellpose.segment import segment
 
-from pathlib import Path
 
-def create_folder(dest_dir, verbose = False) -> None:
+def create_folder(dest_dir, verbose=False) -> None:
     """
     Create new folders.
 
@@ -36,6 +36,7 @@ def create_folder(dest_dir, verbose = False) -> None:
             if e.errno != os.errno.EEXIST:
                 raise
 
+
 def main():
     """Runs large-scale cell segmentation"""
 
@@ -45,30 +46,34 @@ def main():
     scratch_folder = os.path.abspath("../scratch")
 
     model_name = Path(data_folder).joinpath("CP_20240905_144444_LC")
-    
+
     folders_to_process = [p.name for p in Path(data_folder).glob("HCR_744360-ROI-*")]
 
     print(f"Folders to process: {folders_to_process}")
-    
+
     for folder in folders_to_process:
 
         print(f"PROCESSING CELLS OF {folder}")
         curr_results = str(Path(results_folder).joinpath(folder))
 
         create_folder(curr_results)
-        
+
         # Dataset to process
-        IMAGE_PATH = folder #"HCR_732195-ROI2-cell1_2024-06-15_06-00-00"
-        #"HCR_BL6-000_2023-06-1_00-00-00_fused_2024-04-02_20-06-14"
+        IMAGE_PATH = folder  # "HCR_732195-ROI2-cell1_2024-06-15_06-00-00"
+        # "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-04-02_20-06-14"
         # "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-02-09_13-28-49"
-        BKG_CHN = "/".join(list(Path(data_folder).joinpath(f"{folder}/corrected.ome.zarr").glob("*_ch_405.zarr"))[0].parts[-2:])
-        
-        #"SPIM.ome.zarr/Tile_X_0000_Y_0000_Z_0000_ch_405.zarr"
-        #NUCLEI_CHN = "channel_3.zarr"
-    
+        BKG_CHN = "/".join(
+            list(Path(data_folder).joinpath(f"{folder}/corrected.ome.zarr").glob("*_ch_405.zarr"))[
+                0
+            ].parts[-2:]
+        )
+
+        # "SPIM.ome.zarr/Tile_X_0000_Y_0000_Z_0000_ch_405.zarr"
+        # NUCLEI_CHN = "channel_3.zarr"
+
         # NOTE: Change the cell diameter based on multiscale
         multiscale = "2"
-    
+
         # Cellpose params
         cellpose_params = {
             "model_name": str(model_name),
@@ -77,7 +82,7 @@ def main():
             "percentile_range": (10, 99),
             "flow_threshold": 0.0,
         }
-    
+
         scheduler_params = {
             "target_size_mb": 3072,
             "n_workers": 0,
@@ -103,13 +108,13 @@ def main():
                 "super_chunksize": (3, 512, 512, 512),
             },
         }
-    
+
         # dataset_path = f"s3://{BUCKET_NAME}/{IMAGE_PATH}/{TILE_NAME}"
         background_channel = f"{data_folder}/{IMAGE_PATH}/{BKG_CHN}"
-        #nuclei_channel = f"{data_folder}/{IMAGE_PATH}/{NUCLEI_CHN}"
-    
-        dataset_paths = [background_channel]#, nuclei_channel]
-    
+        # nuclei_channel = f"{data_folder}/{IMAGE_PATH}/{NUCLEI_CHN}"
+
+        dataset_paths = [background_channel]  # , nuclei_channel]
+
         segment(
             dataset_paths=dataset_paths,
             multiscale=multiscale,
@@ -120,6 +125,7 @@ def main():
             scheduler_params=scheduler_params,
             code_ocean=True,
         )
+
 
 if __name__ == "__main__":
     main()

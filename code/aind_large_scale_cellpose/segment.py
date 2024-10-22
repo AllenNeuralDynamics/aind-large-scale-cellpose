@@ -188,9 +188,10 @@ def segment(
         if upsample_masks_levels:
             # Setting dataset_paths[0] since I need the path
             # only to pick the metadata for upsampling
+            print("Upscaling segmentation mask!")
             co_cpus = int(utils.get_code_ocean_cpu_limit())
 
-            upscale_mask(
+            upscale_mask.upscale_mask(
                 dataset_path=dataset_paths[0],
                 segmentation_mask_path=output_segmentation_mask,
                 output_folder=results_folder,
