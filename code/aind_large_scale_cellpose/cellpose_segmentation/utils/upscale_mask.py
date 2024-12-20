@@ -279,10 +279,28 @@ def upscale_mask(
         " Image shape: ",
         image_shape,
     )
+    #image_compressor = image_metadata[".zarray"]["compressor"]
+    
+    # Add this check and conversion:
+    if isinstance(image_compressor, dict):
+        if image_compressor["id"] == "blosc":
+            image_compressor = numcodecs.Blosc(
+                cname=image_compressor.get("cname", "zstd"),
+                clevel=image_compressor.get("clevel", 1),
+                shuffle=image_compressor.get("shuffle", 1),
+                blocksize=image_compressor.get("blocksize", 0)
+            )
+        else:
+            # Default fallback if compressor type is unknown
+            image_compressor = numcodecs.Blosc(cname="zstd", clevel=3)
+    elif image_compressor is None:
+        image_compressor = numcodecs.Blosc(cname="zstd", clevel=3)
 
-    image_compressor = (
-        numcodecs.Blosc(cname="zstd", clevel=3) if image_compressor is None else image_compressor
-    )
+    #print("Image compressor: ", image_compressor)
+
+    #image_compressor = (
+    #    numcodecs.Blosc(cname="zstd", clevel=3) if image_compressor is None else image_compressor
+    #)
     print("Image compressor: ", image_compressor)
     # Reading segmentation mask
     seg_mask_reader = ImageReaderFactory().create(
@@ -307,7 +325,7 @@ def upscale_mask(
     upscale_zarr_with_padding(
         input_zarr=lazy_mask_data,
         output_params=output_params,
-        upscale_factors_zyx=(1, 4, 4),  # TODO Calculate factors based on metadata
+        upscale_factors_zyx=(4, 4, 4),  # TODO Calculate factors based on metadata
         new_shape=image_lazy_data.shape,
         n_workers=n_workers,
     )

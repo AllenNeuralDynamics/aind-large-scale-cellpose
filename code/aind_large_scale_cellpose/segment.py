@@ -163,6 +163,7 @@ def segment(
 
         # Output mask
         output_segmentation_mask = scheduler_params["generate_masks"]["output_mask"]
+        #output_segmentation_mask_filename = Path(output_segmentation_mask)
         prediction_chunksize = scheduler_params["generate_masks"]["prediction_chunksize"]
         super_chunksize = scheduler_params["generate_masks"]["super_chunksize"]
 
@@ -195,7 +196,7 @@ def segment(
                 dataset_path=dataset_paths[0],
                 segmentation_mask_path=output_segmentation_mask,
                 output_folder=results_folder,
-                filename="segmentation_mask.zarr",
+                filename= f"segmentation_mask.zarr",
                 dest_multiscale="0",
                 n_workers=co_cpus,
             )

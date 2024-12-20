@@ -1,23 +1,21 @@
 """ top level run script """
 
 import os
+import pathlib
+import argparse 
 
 from aind_large_scale_cellpose.segment import segment
 
-
-def run():
-    """Runs large-scale cell segmentation"""
+def run(dataset):
+    """Runs large-scale cell segmentation
+    
+    Args:
+        dataset (str): Name of the dataset to process
+    """
     # Code ocean folders
     results_folder = os.path.abspath("../results")
     data_folder = os.path.abspath("../data")
     scratch_folder = os.path.abspath("../scratch")
-
-    # Dataset to process
-    IMAGE_PATH = "HCR_742354_2024-08-30_18-00-00"
-    # "HCR_736207.01_2024-07-25_13-00-00"
-    # "HCR_736207-05_2024-08-02_13-00-00"
-    BKG_CHN = "fused/channel_488.zarr"
-    # NUCLEI_CHN = "channel_3.zarr"
 
     # NOTE: Change the cell diameter based on multiscale
     multiscale = "2"
@@ -51,17 +49,17 @@ def run():
             "prediction_chunksize": (3, 128, 128, 128),
         },
         "generate_masks": {
-            "output_mask": f"{results_folder}/segmentation_mask_orig_res.zarr",
+            "output_mask": f"{results_folder}/{dataset}/segmentation_mask_orig_res.zarr",
             "prediction_chunksize": (3, 128, 128, 128),
             "super_chunksize": (3, 512, 512, 512),
         },
     }
 
-    # dataset_path = f"s3://{BUCKET_NAME}/{IMAGE_PATH}/{TILE_NAME}"
-    background_channel = f"{data_folder}/{IMAGE_PATH}/{BKG_CHN}"
-    # nuclei_channel = f"{data_folder}/{IMAGE_PATH}/{NUCLEI_CHN}"
+    BKG_CHN = 'SPIM.ome.zarr/Tile_X_0000_Y_0000_Z_0000_ch_405.zarr'
+    background_channel = f"{data_folder}/{dataset}/{BKG_CHN}"
+    dataset_paths = [background_channel]
 
-    dataset_paths = [background_channel]  # , nuclei_channel]
+    print(f'Segmenting {background_channel}')
 
     segment(
         dataset_paths=dataset_paths,
@@ -75,6 +73,8 @@ def run():
         upsample_masks_levels=1,
     )
 
-
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser(description="Run cell segmentation on a specified dataset")
+    parser.add_argument("dataset", type=str, help="Name of the dataset to process")
+    args = parser.parse_args()
+    run(args.dataset)
