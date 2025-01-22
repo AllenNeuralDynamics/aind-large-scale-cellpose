@@ -163,7 +163,6 @@ def segment(
 
         # Output mask
         output_segmentation_mask = scheduler_params["generate_masks"]["output_mask"]
-        #output_segmentation_mask_filename = Path(output_segmentation_mask)
         prediction_chunksize = scheduler_params["generate_masks"]["prediction_chunksize"]
         super_chunksize = scheduler_params["generate_masks"]["super_chunksize"]
 
