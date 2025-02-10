@@ -49,17 +49,23 @@ def run(dataset):
             "prediction_chunksize": (3, 128, 128, 128),
         },
         "generate_masks": {
-            "output_mask": f"{results_folder}/{dataset}/segmentation_mask_orig_res.zarr",
+            "output_mask": f"{results_folder}/segmentation_mask_orig_res.zarr",
             "prediction_chunksize": (3, 128, 128, 128),
             "super_chunksize": (3, 512, 512, 512),
         },
     }
 
-    BKG_CHN = 'SPIM.ome.zarr/Tile_X_0000_Y_0000_Z_0000_ch_405.zarr'
-    background_channel = f"{data_folder}/{dataset}/{BKG_CHN}"
-    dataset_paths = [background_channel]
+    #BKG_CHN = 'fused/channel_405.zarr'
+    #NUCLEI_CHN = 'fused/channel_594.zarr'
 
-    print(f'Segmenting {background_channel}')
+    #single tile BKG_CHN
+    BKG_CHN = 'SPIM.ome.zarr/Tile_X_0000_Y_0000_Z_0000_ch_405.zarr'
+
+    background_channel = f"{data_folder}/{dataset}/{BKG_CHN}"
+    #nuclei_channel = f"{data_folder}/{dataset}/{NUCLEI_CHN}"
+    dataset_paths = [background_channel]#, nuclei_channel]
+
+    print(f'Segmenting {dataset_paths}')
 
     segment(
         dataset_paths=dataset_paths,
