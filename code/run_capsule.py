@@ -42,11 +42,14 @@ def find_zarr_file(data_folder, dataset, channel):
     """
     # Check image_tile_fusing/OMEZarr first
     omezarr_path = os.path.join(data_folder, dataset, "image_tile_fusing/OMEZarr", channel)
+    print(f'fused_path {omezarr_path}')
+
     if os.path.exists(omezarr_path):
         return omezarr_path
         
     # Check fused directory as backup
-    fused_path = os.path.join(data_folder, dataset, "fused", channel)
+    fused_path = os.path.join(data_folder, dataset, "image_tile_fusing/fused", channel)
+    print(f'fused_path {fused_path}')
     if os.path.exists(fused_path):
         return fused_path
         
@@ -181,11 +184,12 @@ def run(dataset):
         upload_results_to_s3(results_folder, s3_results_path)
 
 def debug(): 
-    dataset = 'HCR_732195-ROI2-cell1_2024-06-15_06-00-00'
+    dataset = "HCR_747107-10_2025-02-07_13-00-00_processed_2025-02-13_20-11-51"#'HCR_732195-ROI2-cell1_2024-06-15_06-00-00'
     run(dataset)
+    
 if __name__ == "__main__":
-    #parser = argparse.ArgumentParser(description="Run cell segmentation on a specified dataset")
-    #parser.add_argument("dataset", type=str, help="Name of the dataset to process")
-    #args = parser.parse_args()
-    #run(args.dataset)
-    debug()
+    parser = argparse.ArgumentParser(description="Run cell segmentation on a specified dataset")
+    parser.add_argument("--dataset", type=str, help="Name of the dataset to process")
+    args = parser.parse_args()
+    run(args.dataset)
+    #debug()

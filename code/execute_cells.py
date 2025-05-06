@@ -47,7 +47,7 @@ def main():
 
     model_name = Path(data_folder).joinpath("CP_20240905_144444_LC")
 
-    folders_to_process = [p.name for p in Path(data_folder).glob("HCR_744360-ROI-*")]
+    folders_to_process = [p.name for p in Path(data_folder).glob("HCR_747107-10_2025-02-07_13-00-00_processed_2025-02-13_20-11-51")]
 
     print(f"Folders to process: {folders_to_process}")
 
@@ -63,10 +63,9 @@ def main():
         # "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-04-02_20-06-14"
         # "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-02-09_13-28-49"
         BKG_CHN = "/".join(
-            list(Path(data_folder).joinpath(f"{folder}/corrected.ome.zarr").glob("*_ch_405.zarr"))[
-                0
-            ].parts[-2:]
-        )
+            list(Path(data_folder).joinpath(f"{folder}/image_tile_fusing/fused").glob("channel_405.zarr"))[
+                0].parts[-2:]
+        #)
 
         # "SPIM.ome.zarr/Tile_X_0000_Y_0000_Z_0000_ch_405.zarr"
         # NUCLEI_CHN = "channel_3.zarr"

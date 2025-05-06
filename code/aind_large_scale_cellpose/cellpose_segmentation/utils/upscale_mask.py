@@ -325,7 +325,7 @@ def upscale_mask(
     upscale_zarr_with_padding(
         input_zarr=lazy_mask_data,
         output_params=output_params,
-        upscale_factors_zyx=(4, 4, 4),  # TODO Calculate factors based on metadata
+        upscale_factors_zyx=(1, 4, 4),  # TODO Calculate factors based on metadata
         new_shape=image_lazy_data.shape,
         n_workers=n_workers,
     )
