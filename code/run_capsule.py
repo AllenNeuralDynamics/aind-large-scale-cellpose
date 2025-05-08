@@ -30,6 +30,47 @@ def read_processing_manifest(DATA_FOLDER):
     return manifest
 
 def find_zarr_file(data_folder, dataset, channel):
+    """Find zarr file across multiple possible locations in the dataset directory
+    
+    Args:
+        data_folder (str or Path): Base data folder path
+        dataset (str): Dataset name
+        channel (str): Channel file name (with or without .zarr extension)
+    
+    Returns:
+        Path: Full path to zarr file if found, None otherwise
+    """
+    # Convert inputs to Path objects
+    base_path = Path(data_folder) / dataset
+
+    
+    # Ensure channel has .zarr extension
+    if not channel.endswith('.zarr'):
+        channel_name = f"{channel}.zarr"
+    else:
+        channel_name = channel
+
+    # Define possible locations to check
+    possible_locations = [
+        base_path / "image_tile_fusing" / "OMEZarr" / channel_name,
+        base_path / "image_tile_fusing" / "fused" / channel_name,
+        base_path / "OMEZarr" / channel_name,  # Add additional potential locations
+        base_path / "fused" / channel_name,
+        base_path / channel_name  # Check directly in dataset folder
+    ]
+    print(f'possible location {possible_locations}')
+    
+    # Check each location
+    for location in possible_locations:
+        if location.exists():
+            print(f"Found zarr file at: {location}")
+            return Path(location).as_posix()
+    
+    # If we get here, no zarr file was found
+    print(f"No zarr file found for dataset '{dataset}', channel '{channel}'")
+    return None
+
+def find_zarr_file_bu(data_folder, dataset, channel):
     """Find zarr file in either fused or image_tile_fusing/OMEZarr directories
     
     Args:
@@ -42,18 +83,22 @@ def find_zarr_file(data_folder, dataset, channel):
     """
     # Check image_tile_fusing/OMEZarr first
     omezarr_path = os.path.join(data_folder, dataset, "image_tile_fusing/OMEZarr", channel)
-    print(f'fused_path {omezarr_path}')
 
-    if os.path.exists(omezarr_path):
+    if os.path.isdir(omezarr_path) or os.path.exists(omezarr_path):
+        print(f'fused_path {omezarr_path}')
+
         return omezarr_path
         
     # Check fused directory as backup
     fused_path = os.path.join(data_folder, dataset, "image_tile_fusing/fused", channel)
     print(f'fused_path {fused_path}')
-    if os.path.exists(fused_path):
+    if os.path.isdir(fused_path) or os.path.exists(fused_path):
+        print(f'fused path exists')
+        print(f'fused_path {fused_path}')
+
         return fused_path
-        
-    return None
+    else:
+        return None
 
 def upload_results_to_s3(local_results_folder, s3_path):
     """Upload results to S3 using s3fs
@@ -134,12 +179,15 @@ def run(dataset):
     }
 
     # Get segmentation channels from manifest, with defaults
-    background_channel = manifest.get('background_channel')
-    nuclei_channel = manifest.get('nuclei_channel')
+    background_channel = manifest['segmentation_channels']['background']
+    nuclei_channel = manifest['segmentation_channels']['nuclear']
+
+    print(f'background channel {background_channel}')
 
     if not background_channel and not nuclei_channel:
         # Default to channel_405 if no channels specified
         background_zarr = find_zarr_file(data_folder, dataset, "channel_405.zarr")
+        print(f'background zarr {background_zarr}')
         if not background_zarr:
             raise FileNotFoundError("Could not find default channel_405.zarr in any expected location")
         dataset_paths = [background_zarr]
@@ -147,7 +195,12 @@ def run(dataset):
         # Use specified channels
         dataset_paths = []
         if background_channel:
-            background_zarr = find_zarr_file(data_folder, dataset, background_channel)
+            if "405" in background_channel: 
+                background_channel = 'channel_405.zarr'
+            print(f' data folder {data_folder}, dataset {dataset}')
+            background_zarr = find_zarr_file(data_folder, dataset, 'channel_405.zarr')
+            print(f'background zarr {background_zarr}')
+
             if background_zarr:
                 dataset_paths.append(background_zarr)
             else:
@@ -184,12 +237,12 @@ def run(dataset):
         upload_results_to_s3(results_folder, s3_results_path)
 
 def debug(): 
-    dataset = "HCR_747107-10_2025-02-07_13-00-00_processed_2025-02-13_20-11-51"#'HCR_732195-ROI2-cell1_2024-06-15_06-00-00'
+    dataset = "HCR_747107_2025-02-21_13-00-00_processed_2025-02-26_04-33-41"#'HCR_732195-ROI2-cell1_2024-06-15_06-00-00'
     run(dataset)
     
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run cell segmentation on a specified dataset")
-    parser.add_argument("--dataset", type=str, help="Name of the dataset to process")
-    args = parser.parse_args()
-    run(args.dataset)
-    #debug()
+    #parser = argparse.ArgumentParser(description="Run cell segmentation on a specified dataset")
+    #parser.add_argument("--dataset", type=str, help="Name of the dataset to process")
+    #args = parser.parse_args()
+    #run(args.dataset)
+    debug()
