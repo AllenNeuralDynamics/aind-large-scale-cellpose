@@ -241,8 +241,8 @@ def debug():
     run(dataset)
     
 if __name__ == "__main__":
-    #parser = argparse.ArgumentParser(description="Run cell segmentation on a specified dataset")
-    #parser.add_argument("--dataset", type=str, help="Name of the dataset to process")
-    #args = parser.parse_args()
-    #run(args.dataset)
-    debug()
+    parser = argparse.ArgumentParser(description="Run cell segmentation on a specified dataset")
+    parser.add_argument("--dataset", type=str, help="Name of the dataset to process")
+    args = parser.parse_args()
+    run(args.dataset)
+    #debug()
