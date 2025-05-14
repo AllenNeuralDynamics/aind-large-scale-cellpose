@@ -74,7 +74,7 @@ def run():
     
     # Will explicitly fail if the path does not exist
     background_channel = list(Path(data_folder).glob(f"*{background_channel_number}.ome.zarr"))[0]
-    dataset_paths.append(background_channel)
+    dataset_paths.append(str(background_channel))
 
     nuclei_channel = None
     if nuclei_channel_number is None:
@@ -83,7 +83,7 @@ def run():
     
     else:
         nuclei_channel = list(Path(data_folder).glob(f"*{nuclei_channel_number}.ome.zarr"))[0]
-        dataset_paths.append(nuclei_channel)
+        dataset_paths.append(str(nuclei_channel))
 
     print(f'Segmenting with channels: {dataset_paths}')
 
