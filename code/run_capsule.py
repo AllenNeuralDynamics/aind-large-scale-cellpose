@@ -1,17 +1,14 @@
 """ top level run script """
 
 import os
-import pathlib
+from pathlib import Path
 import argparse 
 
 from aind_large_scale_cellpose.segment import segment
+from aind_large_scale_cellpose.cellpose_segmentation.utils import utils
 
-def run(dataset):
-    """Runs large-scale cell segmentation
-    
-    Args:
-        dataset (str): Name of the dataset to process
-    """
+def run():
+    """Runs large-scale cell segmentation"""
     # Code ocean folders
     results_folder = os.path.abspath("../results")
     data_folder = os.path.abspath("../data")
@@ -55,17 +52,40 @@ def run(dataset):
         },
     }
 
-    #BKG_CHN = 'fused/channel_405.zarr'
-    #NUCLEI_CHN = 'fused/channel_594.zarr'
+    processing_manifest_path = Path(data_folder).joinpath(
+        "processing_manifest.json"
+    )
 
-    #single tile BKG_CHN
-    BKG_CHN = 'SPIM.ome.zarr/Tile_X_0000_Y_0000_Z_0000_ch_405.zarr'
+    if not processing_manifest_path.exists():
+        raise FileNotFoundError(f"Path {processing_manifest_path} not found!")
 
-    background_channel = f"{data_folder}/{dataset}/{BKG_CHN}"
-    #nuclei_channel = f"{data_folder}/{dataset}/{NUCLEI_CHN}"
-    dataset_paths = [background_channel]#, nuclei_channel]
+    processing_manifest = utils.read_json_as_dict(filepath=processing_manifest_path)
+    segmentation_channels = processing_manifest.get("segmentation_channels", None)
+    
+    if segmentation_channels is None:
+        raise ValueError(f"Please, provide segmentation channels in manifest. {processing_manifest}")
 
-    print(f'Segmenting {dataset_paths}')
+    dataset_paths = []
+    background_channel_number = segmentation_channels.get("background", None)
+    nuclei_channel_number = segmentation_channels.get("nuclear", None)
+
+    if background_channel_number is None:
+        raise ValueError("Background channel is necessary for segmentation.")
+    
+    # Will explicitly fail if the path does not exist
+    background_channel = list(Path(data_folder).glob(f"*{background_channel_number}.ome.zarr"))[0]
+    dataset_paths.append(background_channel)
+
+    nuclei_channel = None
+    if nuclei_channel_number is None:
+        msg = "Nuclei channel not provided, please check parameters if it's an error!"
+        print(msg)
+    
+    else:
+        nuclei_channel = list(Path(data_folder).glob(f"*{nuclei_channel_number}.ome.zarr"))[0]
+        dataset_paths.append(nuclei_channel)
+
+    print(f'Segmenting with channels: {dataset_paths}')
 
     segment(
         dataset_paths=dataset_paths,
@@ -80,7 +100,4 @@ def run(dataset):
     )
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run cell segmentation on a specified dataset")
-    parser.add_argument("dataset", type=str, help="Name of the dataset to process")
-    args = parser.parse_args()
-    run(args.dataset)
+    run()

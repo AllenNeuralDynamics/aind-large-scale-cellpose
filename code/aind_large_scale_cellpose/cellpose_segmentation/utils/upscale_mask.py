@@ -279,8 +279,8 @@ def upscale_mask(
         " Image shape: ",
         image_shape,
     )
-    #image_compressor = image_metadata[".zarray"]["compressor"]
-    
+    # image_compressor = image_metadata[".zarray"]["compressor"]
+
     # Add this check and conversion:
     if isinstance(image_compressor, dict):
         if image_compressor["id"] == "blosc":
@@ -288,7 +288,7 @@ def upscale_mask(
                 cname=image_compressor.get("cname", "zstd"),
                 clevel=image_compressor.get("clevel", 1),
                 shuffle=image_compressor.get("shuffle", 1),
-                blocksize=image_compressor.get("blocksize", 0)
+                blocksize=image_compressor.get("blocksize", 0),
             )
         else:
             # Default fallback if compressor type is unknown
@@ -296,11 +296,11 @@ def upscale_mask(
     elif image_compressor is None:
         image_compressor = numcodecs.Blosc(cname="zstd", clevel=3)
 
-    #print("Image compressor: ", image_compressor)
+    # print("Image compressor: ", image_compressor)
 
-    #image_compressor = (
+    # image_compressor = (
     #    numcodecs.Blosc(cname="zstd", clevel=3) if image_compressor is None else image_compressor
-    #)
+    # )
     print("Image compressor: ", image_compressor)
     # Reading segmentation mask
     seg_mask_reader = ImageReaderFactory().create(
