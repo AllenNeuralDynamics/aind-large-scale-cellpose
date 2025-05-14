@@ -195,7 +195,7 @@ def segment(
                 dataset_path=dataset_paths[0],
                 segmentation_mask_path=output_segmentation_mask,
                 output_folder=results_folder,
-                filename="segmentation_mask.zarr",
+                filename= f"segmentation_mask.zarr",
                 dest_multiscale="0",
                 n_workers=co_cpus,
             )
