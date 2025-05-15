@@ -19,7 +19,7 @@ def run():
 
     # Cellpose params
     cellpose_params = {
-        "model_name": "cyto",  # "../data/CP_20240905_144444_LC",
+        "model_name": "cyto2",  # "../data/CP_20240905_144444_LC",
         "cell_diameter": 30,
         "min_cell_volume": 95,
         "percentile_range": (10, 99),
