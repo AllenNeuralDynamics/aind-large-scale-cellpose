@@ -3,17 +3,171 @@ Code to upsample a segmentatation mask
 """
 
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Hashable, List, Optional, Sequence, Tuple, Union
 
 import dask
+import dask.array as da
 import numcodecs
 import numpy as np
 import s3fs
+import xarray_multiscale
 import zarr
 from aind_large_scale_cellpose.cellpose_segmentation.utils import utils
 from aind_large_scale_prediction.io import ImageReaderFactory, extract_data
 from dask import delayed
 from dask.distributed import Client, LocalCluster, performance_report
+from numcodecs import Blosc
+from zarr import Group, open_group
+
+from .zarr_writer import BlockedArrayWriter
+
+
+def compute_pyramid(
+    data: dask.array.core.Array,
+    n_lvls: int,
+    scale_axis: Tuple[int],
+    chunks: Union[str, Sequence[int], Dict[Hashable, int]] = "auto",
+) -> List[dask.array.core.Array]:
+    """
+    Computes the pyramid levels given an input full resolution image data
+
+    Parameters
+    ------------------------
+
+    data: dask.array.core.Array
+        Dask array of the image data
+
+    n_lvls: int
+        Number of downsampling levels
+        that will be applied to the original image
+
+    scale_axis: Tuple[int]
+        Scaling applied to each axis
+
+    chunks: Union[str, Sequence[int], Dict[Hashable, int]]
+        chunksize that will be applied to the multiscales
+        Default: "auto"
+
+    Returns
+    ------------------------
+
+    Tuple[List[dask.array.core.Array], Dict]:
+        List with the downsampled image(s) and dictionary
+        with image metadata
+    """
+
+    pyramid = xarray_multiscale.multiscale(
+        array=data,
+        reduction=xarray_multiscale.reducers.windowed_mode_countless,  # func
+        scale_factors=scale_axis,  # scale factors
+        preserve_dtype=True,
+        chunks=chunks,
+    )[:n_lvls]
+
+    return [pyramid_level.data for pyramid_level in pyramid]
+
+
+def write_multiscales(
+    path_to_data: Union[str, Path],
+    chunk_size: List[int] = [128, 128, 128],
+    scale_factor: List[int] = [2, 2, 2],
+    target_size_mb: int = 2048,
+    n_lvls: int = 5,
+    root_group: Group = None,
+    verbose: bool = True,
+):
+    """
+    Writes a multi-scale pyramid from an existing Zarr dataset.
+
+    Parameters
+    ----------
+    path_to_data : Union[str, Path]
+        Path to the base Zarr dataset (e.g., '0' level should be present).
+    chunk_size : List[int], optional
+        Chunk size to use for writing each pyramid level. Default is [128, 128, 128].
+    scale_factor : List[int], optional
+        Scaling factor per axis to downsample the data. Default is [2, 2, 2].
+    target_size_mb : int, optional
+        Target block size in MB for optimized writing. Default is 2048 MB.
+    n_lvls : int, optional
+        Number of pyramid levels to generate (excluding base). Default is 5.
+    root_group : Group, optional
+        Zarr group to write the pyramid to. If None, a new group will be created at `path_to_data`.
+    verbose : bool, optional
+        Whether to print progress information. Default is True.
+    """
+    path_to_data = Path(path_to_data)
+    if not path_to_data.exists():
+        raise FileNotFoundError(f"Path {path_to_data} does not exist!")
+
+    # Load the base scale (level 0)
+    base_scale = da.from_zarr(path_to_data / "0")
+
+    if root_group is None:
+        # Assume top-level group creation if not provided
+        root_group = open_group(path_to_data.parent, mode="a")
+
+    if path_to_data.name in root_group:
+        new_channel_group = root_group[path_to_data.name]
+        if verbose:
+            print(f"Group '{path_to_data.name}' already exists. Reusing it.")
+    else:
+        raise ValueError("There must be a group created!")
+
+    # Compute block shape used for optimized writing
+    block_shape = list(
+        BlockedArrayWriter.get_block_shape(
+            arr=base_scale,
+            target_size_mb=target_size_mb,
+            chunks=chunk_size,
+        )
+    )
+
+    # Pad block shape if fewer than 5D
+    extra_axes = (1,) * (5 - len(block_shape))
+
+    block_shape = extra_axes + tuple(block_shape)
+
+    extra_axes_chunks = (1,) * (5 - len(chunk_size))
+    chunk_size = extra_axes_chunks + tuple(chunk_size)
+
+    # Compression settings
+    compressor = Blosc(cname="zstd", clevel=3, shuffle=1, blocksize=0)
+
+    current_scale = base_scale
+
+    for level in range(n_lvls):
+        # Add missing dimensions if needed
+        scale_factors_padded = ([1] * (len(current_scale.shape) - len(scale_factor))) + scale_factor
+        print(current_scale.shape, scale_factors_padded, chunk_size)
+        # Compute one level of pyramid
+        pyramid = compute_pyramid(
+            data=current_scale,
+            scale_axis=scale_factors_padded,
+            chunks=chunk_size,
+            n_lvls=2,  # Generate next level only
+        )
+
+        # Select the downsampled array (next level)
+        current_scale = pyramid[-1]
+
+        print(
+            f"[level {level + 1}] Writing pyramid level with shape {current_scale.shape} - Block shape: {block_shape}"
+        )
+
+        # Create Zarr dataset for the level
+        pyramid_group = new_channel_group.create_dataset(
+            name=str(level + 1),
+            shape=current_scale.shape,
+            chunks=chunk_size,
+            dtype=current_scale.dtype,
+            compressor=compressor,
+            dimension_separator="/",
+            overwrite=True,
+        )
+
+        # Store data in blocks
+        BlockedArrayWriter.store(current_scale, pyramid_group, block_shape)
 
 
 def initialize_output_volume(

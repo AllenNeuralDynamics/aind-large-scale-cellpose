@@ -23,6 +23,7 @@ def segment(
     global_normalization: Optional[bool] = True,
     code_ocean: Optional[bool] = True,
     upsample_masks_levels: Optional[int] = 0,
+    segmentation_mask_filename: str = "segmentation_mask.zarr"
 ):
     """
     Segments a Z1 dataset.
@@ -72,7 +73,7 @@ def segment(
     # Validating output folder
     if len_datasets and os.path.exists(results_folder):
 
-        # Data loader params
+        Data loader params
         super_chunksize = None
         target_size_mb = scheduler_params["target_size_mb"]
         n_workers = scheduler_params["n_workers"]
@@ -188,16 +189,28 @@ def segment(
         if upsample_masks_levels:
             # Setting dataset_paths[0] since I need the path
             # only to pick the metadata for upsampling
-            print("Upscaling segmentation mask!")
+            print("Creating pyramid for segmentation mask!")
             co_cpus = int(utils.get_code_ocean_cpu_limit())
 
+            # Upscales the segmentation mask
             upscale_mask.upscale_mask(
                 dataset_path=dataset_paths[0],
                 segmentation_mask_path=output_segmentation_mask,
                 output_folder=results_folder,
-                filename="segmentation_mask.zarr",
+                filename=segmentation_mask_filename,
                 dest_multiscale="0",
                 n_workers=co_cpus,
+            )
+
+            # Creates the pyramid
+            upscale_mask.write_multiscales(
+                path_to_data=f"{results_folder}/{segmentation_mask_filename}",
+                chunk_size=[128, 128, 128],
+                scale_factor=[2, 2, 2],
+                target_size_mb=2048,
+                n_lvls=5,
+                root_group=None,
+                verbose=True,
             )
 
     else:

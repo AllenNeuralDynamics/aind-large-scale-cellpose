@@ -23,6 +23,7 @@ dependencies = [
     'scipy==1.11.3',
     'cellpose==3.0.5',
     'numba==0.59.1',
+    'xarray_multiscale==2.1.0',
 ]
 
 [project.optional-dependencies]

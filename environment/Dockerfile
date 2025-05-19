@@ -12,4 +12,5 @@ RUN pip install -U --no-cache-dir \
     matplotlib==3.9.0 \
     scipy==1.11.3 \
     cellpose==3.0.5 \
-    numba==0.59.1
+    numba==0.59.1 \
+    xarray_multiscale==2.1.0
