@@ -12,7 +12,7 @@ def run():
     """Runs large-scale cell segmentation"""
     # Code ocean folders
     results_folder = os.path.abspath("../results")
-    data_folder = os.path.abspath("../data/HCR_772643_2025-02-26_10-00-00/SPIM")
+    data_folder = os.path.abspath("../data")
     scratch_folder = os.path.abspath("../scratch")
 
     # NOTE: Change the cell diameter based on multiscale
@@ -53,7 +53,7 @@ def run():
         },
     }
 
-    processing_manifest_path = Path(data_folder).joinpath("derivatives/processing_manifest.json")
+    processing_manifest_path = Path(data_folder).joinpath("processing_manifest.json")
 
     if not processing_manifest_path.exists():
         raise FileNotFoundError(f"Path {processing_manifest_path} not found!")
