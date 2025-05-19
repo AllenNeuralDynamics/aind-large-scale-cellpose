@@ -2,6 +2,7 @@
 Code to upsample a segmentatation mask
 """
 
+import json
 from pathlib import Path
 from typing import Dict, Hashable, List, Optional, Sequence, Tuple, Union
 
@@ -19,6 +20,7 @@ from dask.distributed import Client, LocalCluster, performance_report
 from numcodecs import Blosc
 from zarr import Group, open_group
 
+from .omezarr_metadata import _get_pyramid_metadata, write_ome_ngff_metadata
 from .zarr_writer import BlockedArrayWriter
 
 
@@ -69,12 +71,12 @@ def compute_pyramid(
 
 def write_multiscales(
     path_to_data: Union[str, Path],
+    voxel_size: List[float],
     chunk_size: List[int] = [128, 128, 128],
     scale_factor: List[int] = [2, 2, 2],
     target_size_mb: int = 2048,
     n_lvls: int = 5,
     root_group: Group = None,
-    verbose: bool = True,
 ):
     """
     Writes a multi-scale pyramid from an existing Zarr dataset.
@@ -93,8 +95,6 @@ def write_multiscales(
         Number of pyramid levels to generate (excluding base). Default is 5.
     root_group : Group, optional
         Zarr group to write the pyramid to. If None, a new group will be created at `path_to_data`.
-    verbose : bool, optional
-        Whether to print progress information. Default is True.
     """
     path_to_data = Path(path_to_data)
     if not path_to_data.exists():
@@ -109,8 +109,7 @@ def write_multiscales(
 
     if path_to_data.name in root_group:
         new_channel_group = root_group[path_to_data.name]
-        if verbose:
-            print(f"Group '{path_to_data.name}' already exists. Reusing it.")
+        print(f"Group '{path_to_data.name}' already exists. Reusing it.")
     else:
         raise ValueError("There must be a group created!")
 
@@ -130,6 +129,20 @@ def write_multiscales(
 
     extra_axes_chunks = (1,) * (5 - len(chunk_size))
     chunk_size = extra_axes_chunks + tuple(chunk_size)
+
+    multiscale_zarr_json = write_ome_ngff_metadata(
+        arr_shape=base_scale.shape,
+        chunk_size=chunk_size,
+        image_name="cell_segmentation",
+        n_lvls=n_lvls,
+        scale_factors=scale_factor,
+        voxel_size=voxel_size,
+        origin=[0, 0, 0],
+        metadata=_get_pyramid_metadata(),
+    )
+
+    with open(f"{path_to_data}/.zattrs", "w") as f:
+        json.dump(multiscale_zarr_json, f)
 
     # Compression settings
     compressor = Blosc(cname="zstd", clevel=3, shuffle=1, blocksize=0)

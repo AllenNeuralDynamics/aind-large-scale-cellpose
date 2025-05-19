@@ -23,7 +23,7 @@ def segment(
     global_normalization: Optional[bool] = True,
     code_ocean: Optional[bool] = True,
     upsample_masks_levels: Optional[int] = 0,
-    segmentation_mask_filename: str = "segmentation_mask.zarr"
+    segmentation_mask_filename: str = "segmentation_mask.zarr",
 ):
     """
     Segments a Z1 dataset.
@@ -95,7 +95,7 @@ def segment(
         slices_per_axis = scheduler_params["predict_gradients"]["slices_per_axis"]
         output_gradients_path = scheduler_params["predict_gradients"]["output_gradients_path"]
 
-        dataset_shape = predict_gradients(
+        dataset_shape, voxel_size = predict_gradients(
             dataset_paths=dataset_paths,
             multiscale=multiscale,
             output_gradients_path=output_gradients_path,
@@ -202,16 +202,16 @@ def segment(
                 n_workers=co_cpus,
             )
 
-            # Creates the pyramid
-            upscale_mask.write_multiscales(
-                path_to_data=f"{results_folder}/{segmentation_mask_filename}",
-                chunk_size=[128, 128, 128],
-                scale_factor=[2, 2, 2],
-                target_size_mb=2048,
-                n_lvls=5,
-                root_group=None,
-                verbose=True,
-            )
+        # Creates the pyramid
+        upscale_mask.write_multiscales(
+            path_to_data=f"{results_folder}/{segmentation_mask_filename}",
+            chunk_size=[128, 128, 128],
+            scale_factor=[2, 2, 2],
+            target_size_mb=2048,
+            n_lvls=5,
+            root_group=None,
+            voxel_size=voxel_size,
+        )
 
     else:
         print("Provided paths do not exist!")

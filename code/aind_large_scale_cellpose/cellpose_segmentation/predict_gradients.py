@@ -919,8 +919,9 @@ def predict_gradients(
 
     Returns
     -------
-    Tuple[int]
-        Tuple with the shape of the original dataset
+    Tuple[Tuple, Tuple]
+        Tuple with the shape of the original dataset and
+        Tuple with the resolution TCZYX
     """
     # Tracking compute resources
     # Subprocess to track used resources
@@ -999,6 +1000,7 @@ def predict_gradients(
     )
 
     image_metadata = utils.parse_zarr_metadata(metadata=image_metadata, multiscale=multiscale)
+    scales = [axis["scale"] for axis in image_metadata["axes"].values()]
 
     # axes_names = ["XY", "ZX", "ZY"]
 
@@ -1084,7 +1086,7 @@ def predict_gradients(
             prefix="cellpose_predict_gradients",
         )
 
-    return image_shape[-3:]
+    return image_shape[-3:], scales[-3:]
 
 
 def main():
