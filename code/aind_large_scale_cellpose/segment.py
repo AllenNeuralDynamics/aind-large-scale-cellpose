@@ -73,7 +73,7 @@ def segment(
     # Validating output folder
     if len_datasets and os.path.exists(results_folder):
 
-        Data loader params
+        # Data loader params
         super_chunksize = None
         target_size_mb = scheduler_params["target_size_mb"]
         n_workers = scheduler_params["n_workers"]
