@@ -331,9 +331,11 @@ def add_multiscales_metadata(
         )
     ]
 
-    group.setdefault("attributes", {}).setdefault("ome", {})
-    group["attributes"]["ome"]["multiscales"] = multiscales
-    group["attributes"]["ome"]["omero"] = omero_metadata
+    #group.setdefault("attributes", {}).setdefault("ome", {})
+    #group["attributes"]["ome"]["multiscales"] = multiscales
+    #group["attributes"]["ome"]["omero"] = omero_metadata
+    group["multiscales"] = multiscales
+    group["omero"] = omero_metadata
 
     return group
 
@@ -439,9 +441,9 @@ def write_ome_ngff_metadata(
         Extra metadata to write in the OME-NGFF metadata
     """
     group = dict(
-        zarr_format=3,
-        node_type="group",
-        attributes={},
+        #zarr_format=3,
+        #node_type="group",
+        #attributes={},
     )
 
     if metadata is None:
@@ -474,7 +476,7 @@ def write_ome_ngff_metadata(
         for dataset, transform in zip(datasets, coordinate_transformations):
             dataset["coordinateTransformations"] = transform
 
-    group["attributes"]["ome"] = {"version": "0.5"}
+    # group["attributes"]["ome"] = {"version": "0.5"}
 
     # Writing the multiscale metadata
     group = add_multiscales_metadata(
