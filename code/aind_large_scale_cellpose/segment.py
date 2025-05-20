@@ -11,7 +11,7 @@ from .cellpose_segmentation.compute_flows import generate_flows_and_centroids
 from .cellpose_segmentation.compute_masks import generate_masks
 from .cellpose_segmentation.predict_gradients import predict_gradients
 from .cellpose_segmentation.utils import upscale_mask, utils
-
+from aind_large_scale_prediction.io import ImageReaderFactory
 
 def segment(
     dataset_paths: List[PathLike],
@@ -79,7 +79,7 @@ def segment(
         n_workers = scheduler_params["n_workers"]
         batch_size = 1
 
-        # Cellpose parameters
+        # # Cellpose parameters
         model_name = cellpose_params["model_name"]
         cell_diameter = cellpose_params["cell_diameter"]
         min_cell_volume = cellpose_params["min_cell_volume"]
@@ -189,6 +189,15 @@ def segment(
         if upsample_masks_levels:
             # Setting dataset_paths[0] since I need the path
             # only to pick the metadata for upsampling
+
+            image_metadata = (
+                ImageReaderFactory()
+                .create(data_path=dataset_paths[0], parse_path=False, multiscale=0)
+                .metadata()
+            )
+            image_metadata = utils.parse_zarr_metadata(metadata=image_metadata, multiscale="0")
+            voxel_size = [axis["scale"] for axis in image_metadata["axes"].values()]
+
             print("Creating pyramid for segmentation mask!")
             co_cpus = int(utils.get_code_ocean_cpu_limit())
 
@@ -202,16 +211,16 @@ def segment(
                 n_workers=co_cpus,
             )
 
-        # Creates the pyramid
-        upscale_mask.write_multiscales(
-            path_to_data=f"{results_folder}/{segmentation_mask_filename}",
-            chunk_size=[128, 128, 128],
-            scale_factor=[2, 2, 2],
-            target_size_mb=2048,
-            n_lvls=5,
-            root_group=None,
-            voxel_size=voxel_size,
-        )
+            # Creates the pyramid
+            upscale_mask.write_multiscales(
+                path_to_data=f"{results_folder}/{segmentation_mask_filename}",
+                chunk_size=[128, 128, 128],
+                scale_factor=[2, 2, 2],
+                target_size_mb=2048,
+                n_lvls=5,
+                root_group=None,
+                voxel_size=voxel_size,
+            )
 
     else:
         print("Provided paths do not exist!")

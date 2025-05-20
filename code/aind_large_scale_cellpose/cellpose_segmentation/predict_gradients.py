@@ -1000,8 +1000,6 @@ def predict_gradients(
     )
 
     image_metadata = utils.parse_zarr_metadata(metadata=image_metadata, multiscale=multiscale)
-    scales = [axis["scale"] for axis in image_metadata["axes"].values()]
-
     # axes_names = ["XY", "ZX", "ZY"]
 
     # Processing each plane at a time. This could be faster if you have more
@@ -1086,7 +1084,7 @@ def predict_gradients(
             prefix="cellpose_predict_gradients",
         )
 
-    return image_shape[-3:], scales[-3:]
+    return image_shape[-3:]
 
 
 def main():

@@ -326,7 +326,7 @@ def add_multiscales_metadata(
             name=name or group.get("name"),
             axes=axes,
             datasets=_validate_datasets(datasets, ndim, fmt),
-            type="mode",
+            version="0.4",
             **metadata,
         )
     ]
@@ -375,7 +375,7 @@ def _downscale_origin(
     scale_factors = np.array(scale_factors[-3:], dtype=np.int32)
 
     new_origins = [current_origin.tolist()]
-
+    print(current_voxel_size, scale_factors)
     for _ in range(n_levels - 1):
 
         # Calculate the center shift for the new origin
@@ -476,7 +476,7 @@ def write_ome_ngff_metadata(
         for dataset, transform in zip(datasets, coordinate_transformations):
             dataset["coordinateTransformations"] = transform
 
-    # group["attributes"]["ome"] = {"version": "0.5"}
+    # group["attributes"]["ome"] = {"version": "0.4"}
 
     # Writing the multiscale metadata
     group = add_multiscales_metadata(
