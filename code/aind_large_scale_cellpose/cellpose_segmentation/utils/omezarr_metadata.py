@@ -134,9 +134,9 @@ def _compute_scales(
                 "scale": [
                     1.0,
                     1.0,
-                    pixelsizes[0],
-                    pixelsizes[1],
-                    pixelsizes[2],
+                    pixelsizes[-3],
+                    pixelsizes[-2],
+                    pixelsizes[-1],
                 ],
             }
         ]
@@ -331,9 +331,9 @@ def add_multiscales_metadata(
         )
     ]
 
-    #group.setdefault("attributes", {}).setdefault("ome", {})
-    #group["attributes"]["ome"]["multiscales"] = multiscales
-    #group["attributes"]["ome"]["omero"] = omero_metadata
+    # group.setdefault("attributes", {}).setdefault("ome", {})
+    # group["attributes"]["ome"]["multiscales"] = multiscales
+    # group["attributes"]["ome"]["omero"] = omero_metadata
     group["multiscales"] = multiscales
     group["omero"] = omero_metadata
 
@@ -375,7 +375,6 @@ def _downscale_origin(
     scale_factors = np.array(scale_factors[-3:], dtype=np.int32)
 
     new_origins = [current_origin.tolist()]
-    print(current_voxel_size, scale_factors)
     for _ in range(n_levels - 1):
 
         # Calculate the center shift for the new origin
@@ -441,9 +440,9 @@ def write_ome_ngff_metadata(
         Extra metadata to write in the OME-NGFF metadata
     """
     group = dict(
-        #zarr_format=3,
-        #node_type="group",
-        #attributes={},
+        # zarr_format=3,
+        # node_type="group",
+        # attributes={},
     )
 
     if metadata is None:

@@ -152,7 +152,7 @@ def write_multiscales(
     for level in range(n_lvls):
         # Add missing dimensions if needed
         scale_factors_padded = ([1] * (len(current_scale.shape) - len(scale_factor))) + scale_factor
-        print(current_scale.shape, scale_factors_padded, chunk_size)
+
         # Compute one level of pyramid
         pyramid = compute_pyramid(
             data=current_scale,

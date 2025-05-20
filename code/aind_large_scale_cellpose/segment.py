@@ -5,13 +5,15 @@ Main file to run segmentation
 import os
 from typing import Dict, List, Optional
 
+from aind_large_scale_prediction.io import ImageReaderFactory
+
 from .cellpose_segmentation._shared.types import PathLike
 from .cellpose_segmentation.combine_gradients import combine_gradients
 from .cellpose_segmentation.compute_flows import generate_flows_and_centroids
 from .cellpose_segmentation.compute_masks import generate_masks
 from .cellpose_segmentation.predict_gradients import predict_gradients
 from .cellpose_segmentation.utils import upscale_mask, utils
-from aind_large_scale_prediction.io import ImageReaderFactory
+
 
 def segment(
     dataset_paths: List[PathLike],
@@ -198,7 +200,7 @@ def segment(
             image_metadata = utils.parse_zarr_metadata(metadata=image_metadata, multiscale="0")
             voxel_size = [axis["scale"] for axis in image_metadata["axes"].values()]
 
-            print("Creating pyramid for segmentation mask!")
+            print(f"Creating pyramid for segmentation mask with resolution {voxel_size}!")
             co_cpus = int(utils.get_code_ocean_cpu_limit())
 
             # Upscales the segmentation mask
