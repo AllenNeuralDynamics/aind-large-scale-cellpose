@@ -95,7 +95,7 @@ def segment(
         slices_per_axis = scheduler_params["predict_gradients"]["slices_per_axis"]
         output_gradients_path = scheduler_params["predict_gradients"]["output_gradients_path"]
 
-        dataset_shape, voxel_size = predict_gradients(
+        dataset_shape = predict_gradients(
             dataset_paths=dataset_paths,
             multiscale=multiscale,
             output_gradients_path=output_gradients_path,
