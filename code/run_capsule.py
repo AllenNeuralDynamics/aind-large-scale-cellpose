@@ -136,7 +136,7 @@ def run(dataset):
     manifest = read_processing_manifest(data_folder)
     
     # Check if this is round 1 - only process if it is
-    if manifest.get('round') != 1:
+    if abs(manifest.get('round')) != 1:
         print(f"Skipping segmentation for round {manifest.get('round')} - only processing round 1")
         return
 
@@ -157,18 +157,18 @@ def run(dataset):
         "n_workers": 0,
         "predict_gradients": {
             "slices_per_axis": [20, 20, 20],
-            "output_gradients_path": f"{scratch_folder}/gradients.zarr",
+            "output_gradients_path": f"{results_folder}/gradients.zarr",
         },
         "combine_gradients": {
             "prediction_chunksize": (3, 3, 128, 128, 128),
             "super_chunksize": (3, 3, 128, 128, 128),
             "n_workers": 0,
-            "output_combined_gradients_path": f"{scratch_folder}/combined_gradients.zarr",
-            "output_cellprob_path": f"{scratch_folder}/combined_cellprob.zarr",
+            "output_combined_gradients_path": f"{results_folder}/combined_gradients.zarr",
+            "output_cellprob_path": f"{results_folder}/combined_cellprob.zarr",
         },
         "flow_centroids": {
-            "output_flows": f"{scratch_folder}/pflows.zarr",
-            "output_hists": f"{scratch_folder}/hists.zarr",
+            "output_flows": f"{results_folder}/pflows.zarr",
+            "output_hists": f"{results_folder}/hists.zarr",
             "prediction_chunksize": (3, 128, 128, 128),
         },
         "generate_masks": {
