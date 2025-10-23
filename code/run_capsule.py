@@ -15,8 +15,6 @@ def read_processing_manifest(DATA_FOLDER):
         print('Didn\'t find pipeline processing manifest')
 
         manifest_path = list(Path(DATA_FOLDER).glob("processing_manifest.json"))
-
-
         if not len(manifest_path):
             manifest_path = list(Path(DATA_FOLDER).glob("*/derived/processing_manifest.json"))
             if not len(manifest_path):
