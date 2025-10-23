@@ -13,9 +13,14 @@ def read_processing_manifest(DATA_FOLDER):
     
     if not len(manifest_path):
         print('Didn\'t find pipeline processing manifest')
-        manifest_path = list(Path(DATA_FOLDER).glob("*/derived/processing_manifest.json"))
+
+        manifest_path = list(Path(DATA_FOLDER).glob("processing_manifest.json"))
+
+
         if not len(manifest_path):
-            raise FileNotFoundError("No capsule processing_manifest.json was found!")
+            manifest_path = list(Path(DATA_FOLDER).glob("*/derived/processing_manifest.json"))
+            if not len(manifest_path):
+                raise FileNotFoundError("No capsule processing_manifest.json was found!")
 
     print(f'Manifest_path {manifest_path}')
 
