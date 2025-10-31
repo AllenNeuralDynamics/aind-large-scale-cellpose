@@ -9,7 +9,7 @@ from aind_large_scale_cellpose.segment import segment
 
 def read_processing_manifest(DATA_FOLDER):
     """Load the processing manifest JSON file"""
-    manifest_path = list(Path(DATA_FOLDER).glob("derived/processing_manifest.json"))
+    manifest_path = list(Path(DATA_FOLDER).glob("*/derived/processing_manifest.json"))
     
     if not len(manifest_path):
         print('Didn\'t find pipeline processing manifest')
