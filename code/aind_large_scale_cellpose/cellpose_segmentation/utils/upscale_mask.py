@@ -215,6 +215,202 @@ def upscale_zarr_with_padding(
     print("Upscaling completed.")
 
 
+def generate_multiscale_pyramid(
+    zarr_path: Union[str, Path],
+    max_level: int = 5,
+    downsample_factor: int = 2,
+    n_workers: Optional[int] = 16,
+    chunk_size: Tuple[int, int, int, int, int] = (1, 1, 128, 128, 128),
+) -> None:
+    """
+    Generate a multiscale pyramid for a segmentation mask stored in zarr format.
+    
+    Creates pyramid levels 1 through max_level by iteratively downsampling the
+    previous level. Uses mode-based downsampling to preserve segmentation labels.
+    Each level is stored in the same zarr group as "{level}" where level 0 is
+    the full resolution.
+    
+    This function follows OME-NGFF conventions for multiscale image storage
+    and is optimized for large-scale microscopy data processing.
+    
+    Parameters
+    ----------
+    zarr_path : Union[str, Path]
+        Path to the zarr group containing level "0" (full resolution)
+    max_level : int, default=5
+        Maximum pyramid level to generate (e.g., 5 creates levels 1-5)
+    downsample_factor : int, default=2
+        Factor by which to downsample each spatial dimension per level
+        (typically 2, meaning each level is 1/8 the volume of the previous)
+    n_workers : Optional[int], default=16
+        Number of dask workers for parallel processing
+    chunk_size : Tuple[int, int, int, int, int], default=(1, 1, 128, 128, 128)
+        Chunk size for zarr arrays in (t, c, z, y, x) format
+        
+    Returns
+    -------
+    None
+        Writes pyramid levels directly to the zarr group
+        
+    Raises
+    ------
+    FileNotFoundError
+        If the zarr path does not exist or level "0" is not found
+    ValueError
+        If the input data has incompatible dimensions
+        
+    Notes
+    -----
+    - Level 0 must already exist in the zarr group (created by upscale_mask)
+    - Each pyramid level is created sequentially from the previous level
+    - Uses mode-based downsampling to preserve label identity
+    - Processing is done in chunks for memory efficiency
+    - Compressor and dtype are inherited from level 0
+    
+    Examples
+    --------
+    After creating a full resolution mask:
+    
+    >>> generate_multiscale_pyramid(
+    ...     zarr_path="/path/to/segmentation_mask.zarr",
+    ...     max_level=5,
+    ...     n_workers=16
+    ... )
+    
+    This creates levels 1-5, where each level is downsampled by 2x in z, y, x.
+    Level 1 shape: (t, c, z/2, y/2, x/2)
+    Level 5 shape: (t, c, z/32, y/32, x/32)
+    """
+    zarr_path = Path(zarr_path)
+    
+    if not zarr_path.exists():
+        raise FileNotFoundError(f"Zarr path does not exist: {zarr_path}")
+    
+    # Open the zarr group
+    if zarr_path.as_posix().startswith("s3"):
+        s3 = s3fs.S3FileSystem(
+            config_kwargs={
+                "max_pool_connections": 50,
+                "s3": {
+                    "multipart_threshold": 64 * 1024 * 1024,
+                    "max_concurrent_requests": 20,
+                },
+                "retries": {
+                    "total_max_attempts": 100,
+                    "mode": "adaptive",
+                },
+            }
+        )
+        store = s3fs.S3Map(root=zarr_path.as_posix(), s3=s3)
+        root = zarr.open(store=store, mode="a")
+    else:
+        root = zarr.open_group(zarr_path.as_posix(), mode="a")
+    
+    # Verify level 0 exists
+    if "0" not in root:
+        raise ValueError(f"Level '0' not found in zarr group at {zarr_path}")
+    
+    # Get level 0 metadata
+    level0 = root["0"]
+    compressor = level0.compressor
+    dtype = level0.dtype
+    dimension_separator = level0._dimension_separator
+    
+    print(f"Starting pyramid generation for {zarr_path}")
+    print(f"Level 0 shape: {level0.shape}, dtype: {dtype}")
+    print(f"Generating levels 1 through {max_level}")
+    
+    # Initialize dask cluster
+    client = Client(LocalCluster(n_workers=n_workers, threads_per_worker=1, processes=True))
+    
+    # Generate each pyramid level
+    for level in range(1, max_level + 1):
+        print(f"\n{'='*60}")
+        print(f"Generating level {level}")
+        print(f"{'='*60}")
+        
+        # Get the previous level
+        prev_level = root[str(level - 1)]
+        prev_shape = prev_level.shape  # (t, c, z, y, x)
+        
+        # Calculate new shape (downsample spatial dimensions only)
+        new_shape = (
+            prev_shape[0],  # t unchanged
+            prev_shape[1],  # c unchanged
+            prev_shape[2] // downsample_factor,  # z downsampled
+            prev_shape[3] // downsample_factor,  # y downsampled
+            prev_shape[4] // downsample_factor,  # x downsampled
+        )
+        
+        print(f"Previous level {level-1} shape: {prev_shape}")
+        print(f"New level {level} shape: {new_shape}")
+        
+        # Create the new pyramid level
+        current_level = root.create_dataset(
+            str(level),
+            shape=new_shape,
+            chunks=chunk_size,
+            dtype=dtype,
+            compressor=compressor,
+            dimension_separator=dimension_separator,
+            overwrite=True,
+            fill_value=0,
+        )
+        
+        # Process the data in chunks to downsample
+        # We'll read larger chunks from the previous level and write to current level
+        read_chunk_z, read_chunk_y, read_chunk_x = 256, 256, 256
+        
+        total_z_chunks = int(np.ceil(prev_shape[2] / read_chunk_z))
+        total_y_chunks = int(np.ceil(prev_shape[3] / read_chunk_y))
+        total_x_chunks = int(np.ceil(prev_shape[4] / read_chunk_x))
+        total_chunks = total_z_chunks * total_y_chunks * total_x_chunks
+        
+        print(f"Processing {total_chunks} chunks...")
+        
+        chunk_counter = 0
+        for z_idx in range(0, prev_shape[2], read_chunk_z):
+            for y_idx in range(0, prev_shape[3], read_chunk_y):
+                for x_idx in range(0, prev_shape[4], read_chunk_x):
+                    chunk_counter += 1
+                    
+                    if chunk_counter % 10 == 0:
+                        print(f"  Processing chunk {chunk_counter}/{total_chunks}")
+                    
+                    # Read chunk from previous level
+                    z_end = min(z_idx + read_chunk_z, prev_shape[2])
+                    y_end = min(y_idx + read_chunk_y, prev_shape[3])
+                    x_end = min(x_idx + read_chunk_x, prev_shape[4])
+                    
+                    chunk = prev_level[0, 0, z_idx:z_end, y_idx:y_end, x_idx:x_end]
+                    
+                    # Downsample the chunk
+                    downsampled_chunk = downsample_segmentation_block(
+                        chunk, factor=downsample_factor
+                    )
+                    
+                    # Calculate output indices
+                    z_out = z_idx // downsample_factor
+                    y_out = y_idx // downsample_factor
+                    x_out = x_idx // downsample_factor
+                    
+                    # Write to current level
+                    current_level[
+                        0,
+                        0,
+                        z_out : z_out + downsampled_chunk.shape[0],
+                        y_out : y_out + downsampled_chunk.shape[1],
+                        x_out : x_out + downsampled_chunk.shape[2],
+                    ] = downsampled_chunk
+        
+        print(f"Level {level} completed")
+    
+    client.close()
+    print(f"\n{'='*60}")
+    print(f"Pyramid generation completed successfully!")
+    print(f"Generated levels 0-{max_level} in {zarr_path}")
+    print(f"{'='*60}\n")
+
 def upscale_mask(
     dataset_path: str,
     segmentation_mask_path: str,
@@ -321,6 +517,10 @@ def upscale_mask(
         "dimension_separator": "/",
     }
 
+    # Upsampling the segmentation mask (creates level 0)
+    print("\n" + "="*60)
+    print("STEP 1: Upsampling segmentation mask")
+    print("="*60)
     # Upsampling the segmentation mask
     upscale_zarr_with_padding(
         input_zarr=lazy_mask_data,
@@ -329,3 +529,24 @@ def upscale_mask(
         new_shape=image_lazy_data.shape,
         n_workers=n_workers,
     )
+
+    # Generate pyramid if requested
+    if generate_pyramid:
+        print("\n" + "="*60)
+        print("STEP 2: Generating multiscale pyramid")
+        print("="*60)
+        generate_multiscale_pyramid(
+            zarr_path=output_filepath,
+            max_level=max_pyramid_level,
+            downsample_factor=2,
+            n_workers=n_workers,
+            chunk_size=output_params["chunksize"],
+        )
+    
+    print("\n" + "="*60)
+    print("PROCESSING COMPLETE")
+    print("="*60)
+    print(f"Output location: {output_filepath}")
+    if generate_pyramid:
+        print(f"Pyramid levels: 0 (full resolution) through {max_pyramid_level}")
+    print("="*60 + "\n")
