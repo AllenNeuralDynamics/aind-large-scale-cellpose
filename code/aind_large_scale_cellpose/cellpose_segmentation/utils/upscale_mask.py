@@ -3,7 +3,7 @@ Code to upsample a segmentatation mask
 """
 
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 import dask
 import numcodecs
