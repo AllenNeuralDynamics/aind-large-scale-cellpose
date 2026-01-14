@@ -186,6 +186,7 @@ def run(dataset):
     nuclei_channel = manifest['segmentation_channels']['nuclear']
 
     print(f'background channel {background_channel}')
+    print(f'nuclear channel {nuclei_channel}')
 
     if not background_channel and not nuclei_channel:
         # Default to channel_405 if no channels specified
@@ -210,7 +211,9 @@ def run(dataset):
                 print(f"Warning: Could not find background channel {background_channel}")
                 
         if nuclei_channel:
-            nuclei_zarr = find_zarr_file(data_folder, dataset, nuclei_channel)
+            if "594" in nuclei_channel: 
+                nuclei_channel_name = "channel_594.zarr"
+            nuclei_zarr = find_zarr_file(data_folder, dataset, nuclei_channel_name)
             if nuclei_zarr:
                 dataset_paths.append(nuclei_zarr)
             else:
