@@ -530,6 +530,7 @@ def upscale_mask(
         n_workers=n_workers,
     )
 
+    generate_pyramid = True
     # Generate pyramid if requested
     if generate_pyramid:
         print("\n" + "="*60)
