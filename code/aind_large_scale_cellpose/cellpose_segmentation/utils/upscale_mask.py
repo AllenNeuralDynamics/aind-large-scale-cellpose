@@ -14,6 +14,7 @@ from aind_large_scale_cellpose.cellpose_segmentation.utils import utils
 from aind_large_scale_prediction.io import ImageReaderFactory, extract_data
 from dask import delayed
 from dask.distributed import Client, LocalCluster, performance_report
+from scipy import stats
 
 
 def initialize_output_volume(
@@ -410,6 +411,55 @@ def generate_multiscale_pyramid(
     print(f"Pyramid generation completed successfully!")
     print(f"Generated levels 0-{max_level} in {zarr_path}")
     print(f"{'='*60}\n")
+
+def downsample_segmentation_block(block: np.ndarray, factor: int = 2) -> np.ndarray:
+    """
+    Downsample a segmentation block by taking the mode (most common label) 
+    within each downsampling window.
+    
+    This function preserves segmentation labels by using mode-based downsampling
+    rather than interpolation. For each 2x2x2 (or factor^3) block in the input,
+    the most frequently occurring label is selected for the output.
+    
+    Parameters
+    ----------
+    block : np.ndarray
+        Input block to downsample (3D array for zyx dimensions)
+    factor : int, default=2
+        Downsampling factor (typically 2 for each pyramid level)
+        
+    Returns
+    -------
+    np.ndarray
+        Downsampled block with preserved label integrity
+        
+    Notes
+    -----
+    - Uses scipy.stats.mode to find the most common value in each window
+    - Handles edge cases where dimensions are not evenly divisible by factor
+    - Maintains the same dtype as input
+    """
+    # Get the output shape
+    out_shape = tuple(s // factor for s in block.shape)
+    out_block = np.zeros(out_shape, dtype=block.dtype)
+    
+    # Iterate through the output positions and compute mode
+    for z in range(out_shape[0]):
+        for y in range(out_shape[1]):
+            for x in range(out_shape[2]):
+                # Extract the window from the input block
+                z_start, z_end = z * factor, (z + 1) * factor
+                y_start, y_end = y * factor, (y + 1) * factor
+                x_start, x_end = x * factor, (x + 1) * factor
+                
+                window = block[z_start:z_end, y_start:y_end, x_start:x_end]
+                
+                # Compute mode (most common value) in the window
+                mode_val = stats.mode(window, axis=None, keepdims=False)[0]
+                out_block[z, y, x] = mode_val
+    
+    return out_block
+
 
 def upscale_mask(
     dataset_path: str,
