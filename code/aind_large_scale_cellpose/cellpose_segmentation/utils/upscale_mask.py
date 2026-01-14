@@ -531,6 +531,7 @@ def upscale_mask(
     )
 
     generate_pyramid = True
+    max_pyramid_level = 4
     # Generate pyramid if requested
     if generate_pyramid:
         print("\n" + "="*60)
