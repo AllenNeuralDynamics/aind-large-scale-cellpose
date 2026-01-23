@@ -580,7 +580,7 @@ def upscale_mask(
         n_workers=n_workers,
     )
 
-    generate_pyramid = True
+    generate_pyramid = False
     max_pyramid_level = 4
     # Generate pyramid if requested
     if generate_pyramid:
