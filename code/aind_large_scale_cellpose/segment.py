@@ -3,14 +3,18 @@ Main file to run segmentation
 """
 
 import os
+from pathlib import Path
 from typing import Dict, List, Optional
+
+import dask.array as da
 
 from .cellpose_segmentation._shared.types import PathLike
 from .cellpose_segmentation.combine_gradients import combine_gradients
 from .cellpose_segmentation.compute_flows import generate_flows_and_centroids
 from .cellpose_segmentation.compute_masks import generate_masks
 from .cellpose_segmentation.predict_gradients import predict_gradients
-from .cellpose_segmentation.utils import upscale_mask, utils
+from .cellpose_segmentation.upscale_masks import upscale_mask
+from .cellpose_segmentation.utils import utils
 
 
 def segment(
@@ -191,14 +195,30 @@ def segment(
             print("Upscaling segmentation mask!")
             co_cpus = int(utils.get_code_ocean_cpu_limit())
 
-            upscale_mask.upscale_mask(
+            lazy_mask_data = da.from_zarr(output_segmentation_mask)
+
+            # source_multiscale is the pyramid level the segmentation was run at;
+            # dest_multiscale="0" is full resolution. Per-axis upscale factors are
+            # derived automatically from OME-Zarr coordinate transformation metadata,
+            # correctly handling anisotropic datasets where Z and XY differ.
+            resolution_zyx, _, pyramid_scale_factor = upscale_mask.upscale_mask(
                 dataset_path=dataset_paths[0],
-                segmentation_mask_path=output_segmentation_mask,
+                mask_data=lazy_mask_data,
                 output_folder=results_folder,
-                filename= f"segmentation_mask.zarr",
+                filename="segmentation_mask.zarr",
                 dest_multiscale="0",
+                source_multiscale=multiscale,
                 n_workers=co_cpus,
             )
+
+            if upsample_masks_levels > 1:
+                output_upscaled_mask = str(Path(results_folder) / "segmentation_mask.zarr")
+                upscale_mask.write_multiscales(
+                    path_to_data=output_upscaled_mask,
+                    voxel_size=list(resolution_zyx),
+                    scale_factor=list(pyramid_scale_factor),
+                    n_lvls=upsample_masks_levels,
+                )
 
     else:
         print("Provided paths do not exist!")

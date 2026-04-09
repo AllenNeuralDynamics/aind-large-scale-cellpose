@@ -1,14 +1,15 @@
-""" top level run script """
+"""top level run script"""
 
+import argparse
 import os
 import pathlib
-import argparse 
 
 from aind_large_scale_cellpose.segment import segment
 
+
 def run(dataset):
     """Runs large-scale cell segmentation
-    
+
     Args:
         dataset (str): Name of the dataset to process
     """
@@ -55,17 +56,17 @@ def run(dataset):
         },
     }
 
-    #BKG_CHN = 'fused/channel_405.zarr'
-    #NUCLEI_CHN = 'fused/channel_594.zarr'
+    # BKG_CHN = 'fused/channel_405.zarr'
+    # NUCLEI_CHN = 'fused/channel_594.zarr'
 
-    #single tile BKG_CHN
-    BKG_CHN = 'SPIM.ome.zarr/Tile_X_0000_Y_0000_Z_0000_ch_405.zarr'
+    # single tile BKG_CHN
+    BKG_CHN = "SPIM.ome.zarr/Tile_X_0000_Y_0000_Z_0000_ch_405.zarr"
 
     background_channel = f"{data_folder}/{dataset}/{BKG_CHN}"
-    #nuclei_channel = f"{data_folder}/{dataset}/{NUCLEI_CHN}"
-    dataset_paths = [background_channel]#, nuclei_channel]
+    # nuclei_channel = f"{data_folder}/{dataset}/{NUCLEI_CHN}"
+    dataset_paths = [background_channel]  # , nuclei_channel]
 
-    print(f'Segmenting {dataset_paths}')
+    print(f"Segmenting {dataset_paths}")
 
     segment(
         dataset_paths=dataset_paths,
@@ -78,6 +79,7 @@ def run(dataset):
         code_ocean=True,
         upsample_masks_levels=1,
     )
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run cell segmentation on a specified dataset")
