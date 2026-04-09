@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple, cast
 
 import numpy as np
 from ome_zarr.format import CurrentFormat
-from ome_zarr.writer import Format, JSONDict, _get_valid_axes, _validate_datasets
+from ome_zarr.writer import Format, _get_valid_axes, _validate_datasets
 
 
 def _get_pyramid_metadata():

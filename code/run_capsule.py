@@ -2,7 +2,6 @@
 
 import argparse
 import os
-import pathlib
 
 from aind_large_scale_cellpose.segment import segment
 
