@@ -662,8 +662,6 @@ def upscale_mask(
         raise ValueError(f"We need to have multiple scales. Metadata: {raw_metadata}")
 
     dest_metadata = utils.parse_zarr_metadata(metadata=raw_metadata, multiscale=dest_multiscale)
-    image_metadata = dest_metadata
-    image_shape = image_lazy_data.shape
 
     # Getting list with Z Y X order of the resolution
     resolution_zyx = (
@@ -706,18 +704,6 @@ def upscale_mask(
         f"{pyramid_scale_factor}"
     )
 
-    print(
-        "Image metadata: ",
-        image_metadata,
-        " - Resolution: ",
-        resolution_zyx,
-        " - Image compressor: ",
-        image_compressor,
-        " Image shape: ",
-        image_shape,
-    )
-    # image_compressor = image_metadata[".zarray"]["compressor"]
-
     # Add this check and conversion:
     if isinstance(image_compressor, dict):
         if image_compressor["id"] == "blosc":
@@ -733,13 +719,6 @@ def upscale_mask(
     elif image_compressor is None:
         image_compressor = numcodecs.Blosc(cname="zstd", clevel=3)
 
-    # print("Image compressor: ", image_compressor)
-
-    # image_compressor = (
-    #    numcodecs.Blosc(cname="zstd", clevel=3) if image_compressor is None else image_compressor
-    # )
-    print("Image compressor: ", image_compressor)
-
     output_filepath = output_folder.joinpath(filename).as_posix()
     output_params = {
         "chunksize": [1, 1, 128, 128, 128],
@@ -750,15 +729,6 @@ def upscale_mask(
         "dimension_separator": "/",
     }
 
-    # Upsampling the segmentation mask
-    # upscale_zarr_with_padding(
-    #     input_zarr=mask_data,
-    #     output_params=output_params,
-    #     upscale_factors_zyx=upscale_factors_zyx,
-    #     new_shape=image_lazy_data.shape,
-    #     n_workers=n_workers,
-    # )
-    print(image_lazy_data.shape, mask_data.shape)
     upscale_zarr_with_padding_chunked(
         input_data=mask_data,
         output_params=output_params,
