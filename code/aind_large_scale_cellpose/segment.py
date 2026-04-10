@@ -26,7 +26,7 @@ def segment(
     scheduler_params: Dict,
     global_normalization: Optional[bool] = True,
     code_ocean: Optional[bool] = True,
-    upsample_masks_levels: Optional[int] = 0,
+    upsample_masks: Optional[bool] = True,
 ):
     """
     Segments a Z1 dataset.
@@ -64,8 +64,8 @@ def segment(
     code_ocean: Optional[bool]
         If the instance is running in a code ocean environment.
 
-    upsample_masks_levels: Optional[bool]
-        Upsamples the segmentation masks by n levels.
+    upsample_masks: Optional[bool]
+        Upsamples the segmentation masks.
 
     """
     len_datasets = len(dataset_paths)
@@ -189,7 +189,7 @@ def segment(
             results_folder=results_folder,
         )
 
-        if upsample_masks_levels:
+        if upsample_masks:
             # Setting dataset_paths[0] since I need the path
             # only to pick the metadata for upsampling
             print("Upscaling segmentation mask!")
@@ -211,14 +211,14 @@ def segment(
                 n_workers=co_cpus,
             )
 
-            if upsample_masks_levels > 1:
-                output_upscaled_mask = str(Path(results_folder) / "segmentation_mask.zarr")
-                upscale_mask.write_multiscales(
-                    path_to_data=output_upscaled_mask,
-                    voxel_size=list(resolution_zyx),
-                    scale_factor=list(pyramid_scale_factor),
-                    n_lvls=upsample_masks_levels,
-                )
+            # Creates multiscales based on the pyramid scale factor of raw data
+            output_upscaled_mask = str(Path(results_folder) / "segmentation_mask.zarr")
+            upscale_mask.write_multiscales(
+                path_to_data=output_upscaled_mask,
+                voxel_size=list(resolution_zyx),
+                scale_factor=list(pyramid_scale_factor),
+                n_lvls=4,
+            )
 
     else:
         print("Provided paths do not exist!")

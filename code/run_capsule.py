@@ -59,7 +59,7 @@ def run(dataset):
     # NUCLEI_CHN = 'fused/channel_594.zarr'
 
     # single tile BKG_CHN
-    BKG_CHN = "SPIM.ome.zarr/Tile_X_0000_Y_0000_Z_0000_ch_405.zarr"
+    BKG_CHN = "SPIM/Tile_X_0000_Y_0000_Z_0000_ch_405.ome.zarr"
 
     background_channel = f"{data_folder}/{dataset}/{BKG_CHN}"
     # nuclei_channel = f"{data_folder}/{dataset}/{NUCLEI_CHN}"
@@ -76,7 +76,7 @@ def run(dataset):
         cellpose_params=cellpose_params,
         scheduler_params=scheduler_params,
         code_ocean=True,
-        upsample_masks_levels=1,
+        upsample_masks=True,
     )
 
 

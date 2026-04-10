@@ -980,9 +980,6 @@ def predict_gradients(
             dask_folder=scratch_folder,
             percentile_range=percentile_range,
             min_cell_volume=min_cell_volume,
-            n_workers=int(utils.get_code_ocean_cpu_limit()),  # 16,
-            threads_per_worker=1,
-            combine_method="median",
         )
         logger.info(f"Estimated global percentiles: {combined_percentiles}")
         np.save(f"{results_folder}/combined_percentiles.npy", combined_percentiles)

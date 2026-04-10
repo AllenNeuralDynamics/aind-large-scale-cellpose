@@ -410,12 +410,14 @@ def upscale_array_3d(data_3d: np.ndarray, upscale_factors_zyx: Tuple[int]) -> np
     """
     upscaled = data_3d
 
-    if upscale_factors_zyx[0] > 1:
-        upscaled = np.repeat(upscaled, upscale_factors_zyx[0], axis=0)
-    if upscale_factors_zyx[1] > 1:
-        upscaled = np.repeat(upscaled, upscale_factors_zyx[1], axis=1)
-    if upscale_factors_zyx[2] > 1:
-        upscaled = np.repeat(upscaled, upscale_factors_zyx[2], axis=2)
+    factors = tuple(int(f) for f in upscale_factors_zyx)
+
+    if factors[0] > 1:
+        upscaled = np.repeat(upscaled, factors[0], axis=0)
+    if factors[1] > 1:
+        upscaled = np.repeat(upscaled, factors[1], axis=1)
+    if factors[2] > 1:
+        upscaled = np.repeat(upscaled, factors[2], axis=2)
 
     return upscaled
 
@@ -434,7 +436,7 @@ def _upscale_chunk(
     z_start = chunk_idx * chunk_size_z
     z_end = min((chunk_idx + 1) * chunk_size_z, z_original)
 
-    chunk_data = data_3d[z_start:z_end, :, :]
+    chunk_data = np.asarray(data_3d[z_start:z_end, :, :])
     upscaled_chunk = upscale_array_3d(chunk_data, upscale_factors_zyx)
 
     out_z_start = int(z_start * upscale_factors_zyx[0])
@@ -497,6 +499,8 @@ def upscale_zarr_with_padding_chunked(
     print(f"Input shape: {input_data.shape}")
     print(f"Processing 3D volume: {data_3d.shape}")
 
+    upscale_factors_zyx = tuple(int(f) for f in upscale_factors_zyx)
+    
     # Calculate output dimensions
     upscaled_shape_3d = (
         z * upscale_factors_zyx[0],

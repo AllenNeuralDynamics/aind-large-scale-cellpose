@@ -67,9 +67,13 @@ def get_histogram_range(
         full_range = int(info.max) - int(info.min) + 1
         n_bins = min(full_range, n_bins_cap)
         return float(info.min), float(info.max), n_bins
+
+    elif np.issubdtype(dtype, np.floating):
+        info = np.finfo(dtype)
+        return float(info.min), float(info.max), n_bins_cap
+
     else:
-        # float32 / float64: assume data lives in [0, 1]
-        return 0.0, 1.0, n_bins_cap
+        raise ValueError(f"Unsupported dtype {dtype} for histogram computation.")
 
 
 def compute_channel_histogram(
@@ -261,8 +265,6 @@ def compute_percentiles(
     percentile_range: Tuple[float, float],
     dask_folder: str,
     min_cell_volume: Optional[int] = 0,
-    n_workers: Optional[int] = 0,
-    threads_per_worker: Optional[int] = 1,
 ) -> Tuple[List, Dict]:
     """
     Computes exact global percentiles per channel using histogram accumulation.
@@ -280,15 +282,6 @@ def compute_percentiles(
         Path for dask temporary storage (used only for dask config).
     min_cell_volume: Optional[int]
         Background threshold; voxels <= this value are excluded. Default: 0.
-    n_workers: Optional[int]
-        Kept for API compatibility. Currently unused. Default: 0.
-    threads_per_worker: Optional[int]
-        Kept for API compatibility. Currently unused. Default: 1.
-    combine_method: Optional[str]
-        Deprecated. Previously selected the aggregation strategy for
-        approximate per-block percentile estimates. The histogram approach
-        computes exact global percentiles directly; this parameter is
-        accepted but ignored. Default: 'median'.
 
     Returns
     -------
@@ -308,8 +301,6 @@ def compute_percentiles(
         target_size_mb=target_size_mb,
         percentile_range=percentile_range,
         min_cell_volume=min_cell_volume,
-        n_workers=n_workers,
-        threads_per_worker=threads_per_worker,
     )
 
     combined_percentiles = [
