@@ -403,7 +403,8 @@ def generate_flows_and_centroids(
     start_time = time()
 
     # Setting exec workers to CO CPUs
-    exec_n_workers = n_workers
+    # multiprocessing.Pool requires processes >= 1; None means use os.cpu_count()
+    exec_n_workers = n_workers if n_workers and n_workers > 0 else None
 
     # Create a pool of processes
     pool = multiprocessing.Pool(processes=exec_n_workers)

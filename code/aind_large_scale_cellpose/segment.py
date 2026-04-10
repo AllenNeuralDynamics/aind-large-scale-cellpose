@@ -198,7 +198,7 @@ def segment(
             # dest_multiscale="0" is full resolution. Per-axis upscale factors are
             # derived automatically from OME-Zarr coordinate transformation metadata,
             # correctly handling anisotropic datasets where Z and XY differ.
-            resolution_zyx, _, pyramid_scale_factor = upscale_mask.upscale_mask(
+            resolution_zyx, _, per_level_scale_factors = upscale_mask.upscale_mask(
                 dataset_path=dataset_paths[0],
                 mask_data=lazy_mask_data,
                 output_folder=results_folder,
@@ -208,13 +208,14 @@ def segment(
                 n_workers=co_cpus,
             )
 
-            # Creates multiscales based on the pyramid scale factor of raw data
+            # Creates multiscales based on per-level scale factors read from
+            # the original image's OME-Zarr metadata, correctly handling
+            # anisotropic pyramids where Z and XY may differ per level.
             output_upscaled_mask = str(Path(results_folder) / "segmentation_mask.zarr")
             upscale_mask.write_multiscales(
                 path_to_data=output_upscaled_mask,
                 voxel_size=list(resolution_zyx),
-                scale_factor=list(pyramid_scale_factor),
-                n_lvls=4,
+                scale_factors_per_level=per_level_scale_factors,
             )
 
     else:

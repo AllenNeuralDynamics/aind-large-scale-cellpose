@@ -73,9 +73,9 @@ def write_multiscales(
     path_to_data: Union[str, Path],
     voxel_size: List[float],
     chunk_size: List[int] = [128, 128, 128],
-    scale_factor: List[int] = [2, 2, 2],
+    scale_factors_per_level: List[List[int]] = None,
     target_size_mb: int = 2048,
-    n_lvls: int = 5,
+    n_lvls: int = None,
     root_group: Group = None,
 ):
     """
@@ -87,15 +87,23 @@ def write_multiscales(
         Path to the base Zarr dataset (e.g., '0' level should be present).
     chunk_size : List[int], optional
         Chunk size to use for writing each pyramid level. Default is [128, 128, 128].
-    scale_factor : List[int], optional
-        Scaling factor per axis to downsample the data. Default is [2, 2, 2].
+    scale_factors_per_level : List[List[int]]
+        Downsampling scale factor for each pyramid level transition, in ZYX
+        order. E.g. [[1,2,2], [2,2,2]] means level 0→1 uses [1,2,2] and
+        level 1→2 uses [2,2,2]. Length determines the number of levels written
+        unless overridden by ``n_lvls``.
     target_size_mb : int, optional
         Target block size in MB for optimized writing. Default is 2048 MB.
     n_lvls : int, optional
-        Number of pyramid levels to generate (excluding base). Default is 5.
+        Number of pyramid levels to generate (excluding base). Defaults to
+        ``len(scale_factors_per_level)``.
     root_group : Group, optional
         Zarr group to write the pyramid to. If None, a new group will be created at `path_to_data`.
     """
+    if scale_factors_per_level is None:
+        raise ValueError("scale_factors_per_level must be provided.")
+    if n_lvls is None:
+        n_lvls = len(scale_factors_per_level)
     path_to_data = Path(path_to_data)
     if not path_to_data.exists():
         raise FileNotFoundError(f"Path {path_to_data} does not exist!")
@@ -135,7 +143,7 @@ def write_multiscales(
         chunk_size=chunk_size,
         image_name="cell_segmentation",
         n_lvls=n_lvls,
-        scale_factors=scale_factor,
+        scale_factors=scale_factors_per_level,
         voxel_size=voxel_size,
         origin=[0, 0, 0],
         metadata=_get_pyramid_metadata(),
@@ -150,8 +158,12 @@ def write_multiscales(
     current_scale = base_scale
 
     for level in range(n_lvls):
+        # Use the scale factor for this specific level transition; fall back to
+        # the last entry if n_lvls exceeds the length of the list.
+        level_factor = scale_factors_per_level[min(level, len(scale_factors_per_level) - 1)]
+
         # Add missing dimensions if needed
-        scale_factors_padded = ([1] * (len(current_scale.shape) - len(scale_factor))) + scale_factor
+        scale_factors_padded = ([1] * (len(current_scale.shape) - len(level_factor))) + level_factor
 
         # Compute one level of pyramid
         pyramid = compute_pyramid(
@@ -693,20 +705,23 @@ def upscale_mask(
     elif upscale_factors_zyx is None:
         raise ValueError("Either upscale_factors_zyx or source_multiscale must be provided.")
 
-    # Compute per-axis downsampling factor between level 0 and level 1
-    # from the raw pyramid metadata. This is used when building the mask
-    # pyramid so it exactly mirrors the raw volume's anisotropic structure
-    # (e.g. Z may not be downsampled while Y/X are).
-    next_level = str(int(dest_multiscale) + 1)
-    next_level_meta = utils.parse_zarr_metadata(metadata=raw_metadata, multiscale=next_level)
-    pyramid_scale_factor = tuple(
-        round(next_level_meta["axes"][ax]["scale"] / dest_metadata["axes"][ax]["scale"])
-        for ax in ["z", "y", "x"]
-    )
-    print(
-        f"Pyramid scale factor (level {dest_multiscale} -> {next_level}): "
-        f"{pyramid_scale_factor}"
-    )
+    # Compute per-level scale factors for every consecutive transition in the
+    # original pyramid. This mirrors the exact anisotropic structure of the
+    # source data — e.g. Z may use a different factor than Y/X, and the
+    # factor can differ between levels (level 0→1 vs level 1→2, etc.).
+    per_level_scale_factors = []
+    for i in range(len(pyramid_scales) - 1):
+        src_path = pyramid_scales[i]["path"]
+        dst_path = pyramid_scales[i + 1]["path"]
+        src_meta = utils.parse_zarr_metadata(metadata=raw_metadata, multiscale=src_path)
+        dst_meta = utils.parse_zarr_metadata(metadata=raw_metadata, multiscale=dst_path)
+        factor = [
+            round(dst_meta["axes"][ax]["scale"] / src_meta["axes"][ax]["scale"])
+            for ax in ["z", "y", "x"]
+        ]
+        per_level_scale_factors.append(factor)
+
+    print(f"Per-level scale factors from metadata: {per_level_scale_factors}")
 
     # Add this check and conversion:
     if isinstance(image_compressor, dict):
@@ -742,4 +757,4 @@ def upscale_mask(
         n_workers=n_workers,
     )
 
-    return resolution_zyx, len(pyramid_scales), pyramid_scale_factor
+    return resolution_zyx, len(pyramid_scales), per_level_scale_factors

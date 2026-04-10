@@ -90,7 +90,7 @@ def _build_ome(
 
 def _compute_scales(
     scale_num_levels: int,
-    scale_factor: Tuple[float, float, float],
+    scale_factors_per_level: List[List[float]],
     pixelsizes: Tuple[float, float, float],
     chunks: Tuple[int, int, int, int, int],
     data_shape: Tuple[int, int, int, int, int],
@@ -103,7 +103,9 @@ def _compute_scales(
     Parameters
     ----------
     scale_num_levels: the number of downsampling levels
-    scale_factor: a tuple of scale factors in each spatial dimension (Z, Y, X)
+    scale_factors_per_level: per-level scale factors in ZYX order, e.g.
+        [[1, 2, 2], [2, 2, 2]]. If fewer entries than levels, the last
+        entry is reused for remaining levels.
     pixelsizes: a list of pixel sizes in each spatial dimension (Z, Y, X)
     chunks: a 5D tuple of integers with size of each
     chunk dimension (T, C, Z, Y, X)
@@ -148,6 +150,7 @@ def _compute_scales(
     chunk_sizes.append(opts)
     if scale_num_levels > 1:
         for i in range(scale_num_levels - 1):
+            level_factor = scale_factors_per_level[min(i, len(scale_factors_per_level) - 1)]
             last_transform = transforms[-1][0]
             last_scale = cast(List, last_transform["scale"])
             transforms.append(
@@ -157,18 +160,18 @@ def _compute_scales(
                         "scale": [
                             1.0,
                             1.0,
-                            last_scale[2] * scale_factor[0],
-                            last_scale[3] * scale_factor[1],
-                            last_scale[4] * scale_factor[2],
+                            last_scale[2] * level_factor[-3],
+                            last_scale[3] * level_factor[-2],
+                            last_scale[4] * level_factor[-1],
                         ],
                     }
                 ]
             )
             if translations is not None:
                 transforms[-1].append({"type": "translation", "translation": translations[i + 1]})
-            lastz = int(np.ceil(lastz / scale_factor[0]))
-            lasty = int(np.ceil(lasty / scale_factor[1]))
-            lastx = int(np.ceil(lastx / scale_factor[2]))
+            lastz = int(np.ceil(lastz / level_factor[-3]))
+            lasty = int(np.ceil(lasty / level_factor[-2]))
+            lastx = int(np.ceil(lastx / level_factor[-1]))
             opts = dict(
                 chunks=(
                     1,
@@ -333,7 +336,7 @@ def _downscale_origin(
     array_shape: List[int],
     origin: List[float],
     voxel_size: List[float],
-    scale_factors: List[int],
+    scale_factors_per_level: List[List[int]],
     n_levels: int,
 ):
     """
@@ -347,9 +350,9 @@ def _downscale_origin(
         The initial origin coordinates (z, y, x) of the array.
     voxel_size : list or tuple of float
         The size of each voxel along the (z, y, x) dimensions.
-    scale_factors : list or tuple of int
-        The factors by which to downscale the coordinates along each axis
-        (z, y, x).
+    scale_factors_per_level : List[List[int]]
+        Per-level scale factors in ZYX order, e.g. [[1, 2, 2], [2, 2, 2]].
+        If fewer entries than levels, the last entry is reused.
     n_levels : int
         The number of downscaling levels to calculate.
 
@@ -361,17 +364,20 @@ def _downscale_origin(
     current_shape = np.array(array_shape[-3:], dtype=np.int32)
     current_origin = np.array(origin[-3:], dtype=np.float64)
     current_voxel_size = np.array(voxel_size[-3:], dtype=np.float64)
-    scale_factors = np.array(scale_factors[-3:], dtype=np.int32)
 
     new_origins = [current_origin.tolist()]
-    for _ in range(n_levels - 1):
+    for i in range(n_levels - 1):
+        level_factors = np.array(
+            scale_factors_per_level[min(i, len(scale_factors_per_level) - 1)][-3:],
+            dtype=np.int32,
+        )
 
         # Calculate the center shift for the new origin
-        center_shift = (current_voxel_size * (scale_factors - 1)) / 2
+        center_shift = (current_voxel_size * (level_factors - 1)) / 2
         current_origin += center_shift
 
-        current_shape = np.ceil(current_shape / scale_factors).astype(int)
-        next_voxel_size = current_voxel_size * scale_factors
+        current_shape = np.ceil(current_shape / level_factors).astype(int)
+        next_voxel_size = current_voxel_size * level_factors
         current_voxel_size = next_voxel_size
 
         # Append the new origin
@@ -409,8 +415,9 @@ def write_ome_ngff_metadata(
         The name of the image.
     n_lvls : int
         The number of pyramid levels.
-    scale_factors : tuple
-        The scale factors for downsampling along each dimension.
+    scale_factors : List[List[int]]
+        Per-level scale factors in ZYX order, e.g. [[1, 2, 2], [2, 2, 2]].
+        If fewer entries than levels, the last entry is reused.
     voxel_size : tuple
         The voxel size along each dimension.
     channel_names: List[str]
@@ -450,9 +457,7 @@ def write_ome_ngff_metadata(
     axes_5d = _get_axes_5d()
 
     if origin is not None:
-        origin = _downscale_origin(
-            arr_shape, origin[-3:], voxel_size[-3:], scale_factors[-3:], n_lvls
-        )
+        origin = _downscale_origin(arr_shape, origin[-3:], voxel_size[-3:], scale_factors, n_lvls)
 
     coordinate_transformations, chunk_opts = _compute_scales(
         n_lvls, scale_factors, voxel_size, chunk_size, arr_shape, origin
