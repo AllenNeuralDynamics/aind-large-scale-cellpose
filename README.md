@@ -157,10 +157,7 @@ The input dataset must be an OME-Zarr multiscale store. Pass multiple paths to `
 
 ## Upscaling segmentation masks
 
-When segmentation is run on a downsampled pyramid level (e.g., `multiscale="2"`), pass `upsample_masks_levels` to upscale the mask back toward full resolution:
-
-- `upsample_masks_levels=1` — upscale to full resolution (level 0) only, no pyramid.
-- `upsample_masks_levels=N` (N > 1) — upscale to level 0 and write an N-level OME-Zarr pyramid.
+When segmentation is run on a downsampled pyramid level (e.g., `multiscale="2"`), set `upsample_masks` to True to upscale the mask back toward full resolution and below to match the pyramid levels of the dataset to segment.
 
 Per-axis upscale factors are computed automatically from the OME-Zarr coordinate transformation metadata (`source_multiscale → dest_multiscale="0"`). This correctly handles anisotropic datasets where Z and XY axes have different scale factors per pyramid level (e.g., SmartSPIM Z1).
 
