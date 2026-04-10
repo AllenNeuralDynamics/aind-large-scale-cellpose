@@ -71,7 +71,7 @@ def segment(
     len_datasets = len(dataset_paths)
 
     if not len_datasets:
-        ValueError("Please, provide valid paths. Empty list!")
+        raise ValueError("Please, provide valid paths. Empty list!")
 
     # Validating output folder
     if len_datasets and os.path.exists(results_folder):
@@ -147,9 +147,6 @@ def segment(
         output_combined_hists = scheduler_params["flow_centroids"]["output_hists"]
         prediction_chunksize = scheduler_params["flow_centroids"]["prediction_chunksize"]
 
-        output_combined_pflows = f"{results_folder}/pflows.zarr"
-        output_combined_hists = f"{results_folder}/hists.zarr"
-
         # Large-scale generation of flows, centroids and hists
         cell_centroids_path = generate_flows_and_centroids(
             dataset_path=output_combined_gradients_path,
@@ -159,7 +156,7 @@ def segment(
             axis_overlap=cell_diameter // 2,  # Used to get the overlapping area
             prediction_chunksize=prediction_chunksize,
             target_size_mb=target_size_mb,
-            n_workers=10,  # n_workers,
+            n_workers=n_workers,
             batch_size=batch_size,
             super_chunksize=None,
             results_folder=results_folder,

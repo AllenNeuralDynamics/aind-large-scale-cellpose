@@ -500,7 +500,7 @@ def upscale_zarr_with_padding_chunked(
     print(f"Processing 3D volume: {data_3d.shape}")
 
     upscale_factors_zyx = tuple(int(f) for f in upscale_factors_zyx)
-    
+
     # Calculate output dimensions
     upscaled_shape_3d = (
         z * upscale_factors_zyx[0],
