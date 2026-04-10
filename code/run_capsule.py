@@ -1,29 +1,28 @@
-""" top level run script """
+"""top level run script"""
 
+import argparse
 import os
 
 from aind_large_scale_cellpose.segment import segment
 
 
-def run():
-    """Runs large-scale cell segmentation"""
+def run(dataset):
+    """Runs large-scale cell segmentation
+
+    Args:
+        dataset (str): Name of the dataset to process
+    """
     # Code ocean folders
     results_folder = os.path.abspath("../results")
     data_folder = os.path.abspath("../data")
     scratch_folder = os.path.abspath("../scratch")
-
-    # Dataset to process
-    IMAGE_PATH = "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-04-02_20-06-14"
-    # "HCR_BL6-000_2023-06-1_00-00-00_fused_2024-02-09_13-28-49"
-    BKG_CHN = "channel_405.zarr"
-    NUCLEI_CHN = "channel_3.zarr"
 
     # NOTE: Change the cell diameter based on multiscale
     multiscale = "2"
 
     # Cellpose params
     cellpose_params = {
-        "model_name": "cyto",
+        "model_name": "cyto",  # "../data/CP_20240905_144444_LC",
         "cell_diameter": 30,
         "min_cell_volume": 95,
         "percentile_range": (10, 99),
@@ -34,7 +33,7 @@ def run():
         "target_size_mb": 3072,
         "n_workers": 0,
         "predict_gradients": {
-            "slices_per_axis": [48, 48, 45],
+            "slices_per_axis": [20, 20, 20],
             "output_gradients_path": f"{scratch_folder}/gradients.zarr",
         },
         "combine_gradients": {
@@ -50,17 +49,23 @@ def run():
             "prediction_chunksize": (3, 128, 128, 128),
         },
         "generate_masks": {
-            "output_mask": f"{results_folder}/segmentation_mask.zarr",
+            "output_mask": f"{results_folder}/segmentation_mask_orig_res.zarr",
             "prediction_chunksize": (3, 128, 128, 128),
             "super_chunksize": (3, 512, 512, 512),
         },
     }
 
-    # dataset_path = f"s3://{BUCKET_NAME}/{IMAGE_PATH}/{TILE_NAME}"
-    background_channel = f"{data_folder}/{IMAGE_PATH}/{BKG_CHN}"
-    nuclei_channel = f"{data_folder}/{IMAGE_PATH}/{NUCLEI_CHN}"
+    # BKG_CHN = 'fused/channel_405.zarr'
+    # NUCLEI_CHN = 'fused/channel_594.zarr'
 
-    dataset_paths = [background_channel, nuclei_channel]
+    # single tile BKG_CHN
+    BKG_CHN = "SPIM/Tile_X_0000_Y_0000_Z_0000_ch_405.ome.zarr"
+
+    background_channel = f"{data_folder}/{dataset}/{BKG_CHN}"
+    # nuclei_channel = f"{data_folder}/{dataset}/{NUCLEI_CHN}"
+    dataset_paths = [background_channel]  # , nuclei_channel]
+
+    print(f"Segmenting {dataset_paths}")
 
     segment(
         dataset_paths=dataset_paths,
@@ -71,8 +76,12 @@ def run():
         cellpose_params=cellpose_params,
         scheduler_params=scheduler_params,
         code_ocean=True,
+        upsample_masks=True,
     )
 
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser(description="Run cell segmentation on a specified dataset")
+    parser.add_argument("dataset", type=str, help="Name of the dataset to process")
+    args = parser.parse_args()
+    run(args.dataset)

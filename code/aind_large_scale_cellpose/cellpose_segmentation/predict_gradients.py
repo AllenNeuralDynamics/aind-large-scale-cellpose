@@ -116,7 +116,7 @@ def run_net(
 
     # run network
     if tile or augment or imgs.ndim == 4:
-        # print("Running tiled: ", slc, imgs.shape)
+        print("Running tiled: ", slc, imgs.shape)
         y, style = _run_tiled(
             net,
             imgs,
@@ -351,26 +351,37 @@ def run_2D_cellpose(
 
     pm = [(0, 1, 2, 3), (1, 0, 2, 3), (2, 0, 1, 3)]
     ipm = [(3, 0, 1, 2), (3, 1, 0, 2), (3, 1, 2, 0)]
-    xsl = imgs.transpose(pm[img_axis])
+    imgs = imgs.transpose(pm[img_axis])
 
-    shape = xsl.shape
-    xsl = transforms.resize_image(xsl, rsz=rescaling[img_axis])
+    shape = imgs.shape
+    print(f"Starting resizing of image transposed: {shape} - {rescaling[img_axis]}")
+    rescaled_factors_np = np.array(rescaling[img_axis], dtype=np.float16)
+    rescaled_factors_np_eval = rescaled_factors_np[rescaled_factors_np != 1.0]
+
+    # Resizing it's needed
+    if rescaled_factors_np_eval.shape[0]:
+        imgs = transforms.resize_image(imgs, rsz=rescaling[img_axis])
 
     print(
-        f"running {sstr[img_axis]}: {shape[0]} planes of size ({shape[1]}, {shape[2]}) - batch size: {batch_size} - Resized shape: {xsl.shape} - Orig shape {imgs.shape} - Rescaling: {rescaling} - Anisotropy: {anisotropy} - Resize: {rsz}"  # noqa: E501
+        f"running {sstr[img_axis]}: {shape[0]} planes of size ({shape[1]}, {shape[2]}) - batch size: {batch_size} - Resized shape: {imgs.shape} - Orig shape {imgs.shape} - Rescaling: {rescaling} - Anisotropy: {anisotropy} - Resize: {rsz}"  # noqa: E501
     )
 
     y, style = run_net(
         net,
-        xsl,
+        imgs,
         batch_size=batch_size,
         augment=augment,
         tile=tile,
         bsize=bsize,
         tile_overlap=tile_overlap,
     )
+    # Deleting because I need memory for interpolation in resizing
+    del imgs
 
-    y = transforms.resize_image(y, shape[1], shape[2])
+    # Resizing back
+    if rescaled_factors_np_eval.shape[0]:
+        y = transforms.resize_image(y, shape[1], shape[2])
+
     y = y.transpose(ipm[img_axis])
 
     if progress is not None:
@@ -712,6 +723,7 @@ def large_scale_cellpose_gradients_per_axis(
 
     # Getting current GPU device and inizialing cellpose network
     sdevice, gpu = assign_device(use_torch=use_GPU, gpu=use_GPU)
+    logger.info(f"Loading pretrained model from: {model_name}")
 
     # Loading model, could be a pretrained model
     if Path(model_name).exists():
@@ -787,10 +799,10 @@ def large_scale_cellpose_gradients_per_axis(
         global_coord_pos = tuple(global_coord_pos)
         logger.info(f"Writing to: {global_coord_pos}")
 
-        prediction = np.expand_dims(y, axis=0)
+        y = np.expand_dims(y, axis=0)
 
         output_shape = output_gradients[global_coord_pos].shape
-        output_prediction = prediction[
+        output_prediction = y[
             : output_shape[0],
             : output_shape[1],
             : output_shape[2],
@@ -802,6 +814,8 @@ def large_scale_cellpose_gradients_per_axis(
         logger.info(
             f"Processing Batch {i}: {sample.batch_tensor.shape} - Pinned?: {sample.batch_tensor.is_pinned()} - dtype: {sample.batch_tensor.dtype} - device: {sample.batch_tensor.device} - global_coords: {global_coord_pos} - Pred shape: {y.shape}"  # noqa: E501
         )
+        # Removing memory
+        del y
 
     # Cleaning up memory
     empty_cache()
@@ -966,9 +980,6 @@ def predict_gradients(
             dask_folder=scratch_folder,
             percentile_range=percentile_range,
             min_cell_volume=min_cell_volume,
-            n_workers=int(utils.get_code_ocean_cpu_limit()),  # 16,
-            threads_per_worker=1,
-            combine_method="median",
         )
         logger.info(f"Estimated global percentiles: {combined_percentiles}")
         np.save(f"{results_folder}/combined_percentiles.npy", combined_percentiles)
@@ -1094,7 +1105,7 @@ def main():
     global_normalization = True  # TODO Normalize image in the entire dataset
     cell_diameter = 15
 
-    slices_per_axis = [40, 80, 80]
+    slices_per_axis = [20, 40, 40]
 
     # output gradients
     output_gradients_path = "../results/gradients.zarr"

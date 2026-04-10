@@ -3,13 +3,18 @@ Main file to run segmentation
 """
 
 import os
+from pathlib import Path
 from typing import Dict, List, Optional
+
+import dask.array as da
 
 from .cellpose_segmentation._shared.types import PathLike
 from .cellpose_segmentation.combine_gradients import combine_gradients
 from .cellpose_segmentation.compute_flows import generate_flows_and_centroids
 from .cellpose_segmentation.compute_masks import generate_masks
 from .cellpose_segmentation.predict_gradients import predict_gradients
+from .cellpose_segmentation.upscale_masks import upscale_mask
+from .cellpose_segmentation.utils import utils
 
 
 def segment(
@@ -21,6 +26,7 @@ def segment(
     scheduler_params: Dict,
     global_normalization: Optional[bool] = True,
     code_ocean: Optional[bool] = True,
+    upsample_masks: Optional[bool] = True,
 ):
     """
     Segments a Z1 dataset.
@@ -58,11 +64,14 @@ def segment(
     code_ocean: Optional[bool]
         If the instance is running in a code ocean environment.
 
+    upsample_masks: Optional[bool]
+        Upsamples the segmentation masks.
+
     """
     len_datasets = len(dataset_paths)
 
     if not len_datasets:
-        ValueError("Please, provide valid paths. Empty list!")
+        raise ValueError("Please, provide valid paths. Empty list!")
 
     # Validating output folder
     if len_datasets and os.path.exists(results_folder):
@@ -138,16 +147,14 @@ def segment(
         output_combined_hists = scheduler_params["flow_centroids"]["output_hists"]
         prediction_chunksize = scheduler_params["flow_centroids"]["prediction_chunksize"]
 
-        output_combined_pflows = f"{results_folder}/pflows.zarr"
-        output_combined_hists = f"{results_folder}/hists.zarr"
-
+        axis_overlap = cell_diameter // 2
         # Large-scale generation of flows, centroids and hists
         cell_centroids_path = generate_flows_and_centroids(
             dataset_path=output_combined_gradients_path,
             output_pflow_path=output_combined_pflows,
             output_hist_path=output_combined_hists,
             multiscale=".",
-            axis_overlap=cell_diameter // 2,  # Used to get the overlapping area
+            axis_overlap=axis_overlap,  # Used to get the overlapping area
             prediction_chunksize=prediction_chunksize,
             target_size_mb=target_size_mb,
             n_workers=n_workers,
@@ -169,7 +176,7 @@ def segment(
             cell_centroids_path=cell_centroids_path,
             output_seg_mask_path=output_segmentation_mask,
             original_dataset_shape=dataset_shape,
-            axis_overlap=cell_diameter // 2,  # Used to get the overlapping area
+            axis_overlap=axis_overlap,  # Used to get the overlapping area
             prediction_chunksize=prediction_chunksize,
             target_size_mb=None,
             n_workers=n_workers,
@@ -179,6 +186,38 @@ def segment(
             flow_threshold=flow_threshold,
             results_folder=results_folder,
         )
+
+        if upsample_masks:
+            # Setting dataset_paths[0] since I need the path
+            # only to pick the metadata for upsampling
+            print("Upscaling segmentation mask!")
+            co_cpus = int(utils.get_code_ocean_cpu_limit())
+
+            lazy_mask_data = da.from_zarr(output_segmentation_mask)
+
+            # source_multiscale is the pyramid level the segmentation was run at;
+            # dest_multiscale="0" is full resolution. Per-axis upscale factors are
+            # derived automatically from OME-Zarr coordinate transformation metadata,
+            # correctly handling anisotropic datasets where Z and XY differ.
+            resolution_zyx, _, per_level_scale_factors = upscale_mask.upscale_mask(
+                dataset_path=dataset_paths[0],
+                mask_data=lazy_mask_data,
+                output_folder=results_folder,
+                filename="segmentation_mask.zarr",
+                dest_multiscale="0",
+                source_multiscale=multiscale,
+                n_workers=co_cpus,
+            )
+
+            # Creates multiscales based on per-level scale factors read from
+            # the original image's OME-Zarr metadata, correctly handling
+            # anisotropic pyramids where Z and XY may differ per level.
+            output_upscaled_mask = str(Path(results_folder) / "segmentation_mask.zarr")
+            upscale_mask.write_multiscales(
+                path_to_data=output_upscaled_mask,
+                voxel_size=list(resolution_zyx),
+                scale_factors_per_level=per_level_scale_factors,
+            )
 
     else:
         print("Provided paths do not exist!")
