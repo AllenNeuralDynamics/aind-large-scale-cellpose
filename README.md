@@ -93,7 +93,7 @@ segment(
         },
     },
     global_normalization=True,
-    upsample_masks_levels=1,
+    upsample_masks=True,
 )
 ```
 
