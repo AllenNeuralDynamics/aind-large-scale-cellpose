@@ -147,13 +147,14 @@ def segment(
         output_combined_hists = scheduler_params["flow_centroids"]["output_hists"]
         prediction_chunksize = scheduler_params["flow_centroids"]["prediction_chunksize"]
 
+        axis_overlap = cell_diameter // 2
         # Large-scale generation of flows, centroids and hists
         cell_centroids_path = generate_flows_and_centroids(
             dataset_path=output_combined_gradients_path,
             output_pflow_path=output_combined_pflows,
             output_hist_path=output_combined_hists,
             multiscale=".",
-            axis_overlap=cell_diameter // 2,  # Used to get the overlapping area
+            axis_overlap=axis_overlap,  # Used to get the overlapping area
             prediction_chunksize=prediction_chunksize,
             target_size_mb=target_size_mb,
             n_workers=n_workers,
@@ -175,7 +176,7 @@ def segment(
             cell_centroids_path=cell_centroids_path,
             output_seg_mask_path=output_segmentation_mask,
             original_dataset_shape=dataset_shape,
-            axis_overlap=cell_diameter // 2,  # Used to get the overlapping area
+            axis_overlap=axis_overlap,  # Used to get the overlapping area
             prediction_chunksize=prediction_chunksize,
             target_size_mb=None,
             n_workers=n_workers,
