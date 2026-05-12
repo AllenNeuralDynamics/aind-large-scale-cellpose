@@ -33,7 +33,7 @@ def main():
 
         raw_data_path = f"{dataset_root}/{raw_data}"
 
-        results_folder = f"/results/HCR_782149_2025-11-05_13-00-00_processed_2025-11-10_20-37-29"
+        results_folder = f"/results/{dataset}"
         if not os.path.exists(results_folder):
             os.mkdir(results_folder)
 
