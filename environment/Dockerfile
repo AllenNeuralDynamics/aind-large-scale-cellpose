@@ -4,7 +4,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 ARG GIT_ASKPASS
 ARG GIT_ACCESS_TOKEN
-COPY git-askpass /
+COPY git-ask-pass /
 
 RUN pip install -U --no-cache-dir \
     aind-large-scale-prediction==1.0.0 \
@@ -13,4 +13,5 @@ RUN pip install -U --no-cache-dir \
     scipy==1.11.3 \
     cellpose==3.0.5 \
     numba==0.59.1 \
-    s3fs==2024.12.0 
+    s3fs==2024.12.0 \
+    aind-data-schema==2.9.0
