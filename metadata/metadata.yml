@@ -1,5 +1,5 @@
 metadata_version: 1
-name: aind-large-scale-cellpose_multi_tile_processed
+name: aind-large-scale-cellpose-production
 description: Large-scale cell segmentation for Z1 data.
 authors:
 - name: Camilo Laiton
