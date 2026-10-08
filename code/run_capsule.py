@@ -6,6 +6,26 @@ import argparse
 import s3fs
 
 from aind_large_scale_cellpose.segment import segment
+from processing_helper import (ProcessTimer, make_data_process,
+                                   input_assets_from_data, write_processing)
+
+def make_processing_json(effective_params):
+    
+
+    process = make_data_process(
+        process_type="Cell Body Segmentation",          # a ProcessName value
+        name="aind-large-scale-cellpose",           # unique & descriptive if the type can repeat
+        code_url="https://github.com/AllenNeuralDynamics/aind-z1-cell-segmentation.git",
+        # code_version="1.2.0",                  # and/or commit_hash=git_commit()
+        commit_hash = "a35fcd9",
+        experimenters=["Carson Berry"],
+        # start=t.start, end=t.end,
+        parameters=effective_params,           # ALL effective params, incl. defaults
+        input_data=input_assets_from_data("/data"),
+        output_path="cell_body_segmentation",             # relative to /results
+        core_dependency=(""),   # version looked up when None
+    )
+    write_processing([process])                # inherits upstream in /data, appends, writes /results
 
 def read_processing_manifest(DATA_FOLDER):
     """Load the processing manifest JSON file"""
@@ -223,6 +243,13 @@ def run(dataset):
         raise FileNotFoundError("No valid zarr files found for segmentation")
 
     print(f'Segmenting {dataset_paths}')
+    effective_params = {"background_channel":background_channel,
+                        "nuclear_channel": nuclei_zarr, 
+                        "multiscale":multiscale,
+                        "cellpose_params":cellpose_params,
+                        "scheduler_params": scheduler_params}
+    make_processing_json(effective_params)
+
 
     segment(
         dataset_paths=dataset_paths,
